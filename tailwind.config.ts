@@ -10,8 +10,8 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: "#F7FAFF", // Soft sky white
-        primary: "#0F172A", // Deep slate for text
+        background: "var(--bg-color)", // Dynamic based on theme
+        primary: "var(--text-primary)", // Dynamic text color
         accent: "#60A5FA", // Sky blue
         "accent-secondary": "#3B82F6",
         "text-secondary": "#64748B",

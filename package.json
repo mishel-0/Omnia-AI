@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "NEXT_DISABLE_ESLINT=1 NEXT_DISABLE_TYPECHECK=1 next dev --turbopack",
+    "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
     "lint": "oxlint",
@@ -14,6 +14,7 @@
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.4",
     "clsx": "^2.1.1",
+    "firebase": "^12.11.0",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.7.0",
     "next": "15.5.7",
@@ -35,11 +36,6 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "unrs-resolver"
-    ],
-    "peerDependencyRules": {
-      "allowAny": [
-        "supabase"
-      ]
-    }
+    ]
   }
 }
