@@ -1,36 +1,82 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Omnia AI
 
-## Getting Started
+**AI-powered early detection assistant** for lung cancer (X-ray analysis) and skin cancer (image analysis), powered by the **Aaria Neural Engine**.
 
-First, run the development server:
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-15-000000?style=flat&logo=next.js&logoColor=white)
+![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=flat&logo=supabase&logoColor=white)
+![Firebase](https://img.shields.io/badge/Firebase-FFCA28?style=flat&logo=firebase&logoColor=black)
+
+## 🧬 Overview
+
+Omnia AI leverages deep learning to assist in the early detection of critical health conditions:
+
+- **Lung Cancer Detection** — analyzes chest X-ray images using a trained CNN model
+- **Skin Cancer Classification** — evaluates dermatoscopic images for malignancy indicators
+
+The platform combines a **Next.js 15** frontend with **Supabase** for data storage and **Firebase** for authentication, all integrated with the proprietary Aaria Neural Engine for inference.
+
+## ✨ Features
+
+- 🏥 **Multi-disease detection** (lung & skin cancer)
+- 🖼️ **Image upload & analysis** with real-time results
+- 🔐 **Firebase Authentication** — secure user login
+- 📊 **Supabase backend** — scalable data storage
+- 🎨 **Responsive UI** with Tailwind CSS & Framer Motion animations
+- 📱 **Mobile-friendly** design
+
+## 🛠️ Tech Stack
+
+| Technology | Purpose |
+|------------|---------|
+| **Next.js 15** | React framework with Turbopack |
+| **TypeScript** | Type-safe development |
+| **Supabase** | Database & storage |
+| **Firebase** | Authentication & backend services |
+| **Tailwind CSS** | Utility-first styling |
+| **Framer Motion** | Page transitions & animations |
+| **Lucide React** | Icon components |
+
+## 🚀 Getting Started
 
 ```bash
+# Install dependencies
+npm install
+
+# Start development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+
+# Build for production
+npm run build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Environment Variables
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Create a `.env.local` file:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_api_key
+```
 
-## Learn More
+## 📁 Project Structure
 
-To learn more about Next.js, take a look at the following resources:
+```
+Omnia-AI/
+├── app/               # Next.js App Router pages
+│   ├── dashboard/     # User dashboard
+│   ├── onboarding/    # New user flow
+│   ├── page.tsx       # Landing page
+│   └── layout.tsx     # Root layout
+├── lib/               # Shared utilities
+│   ├── firebase.ts    # Firebase config
+│   └── utils.ts       # Helper functions
+├── supabase/          # Supabase configuration
+├── public/            # Static assets
+└── components/        # UI components
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Built with ❤️ for early disease detection.
