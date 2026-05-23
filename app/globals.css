@@ -2,97 +2,79 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  body {
+    @apply bg-[#080b13] text-white dark:bg-[#080b13] dark:text-white;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-image: 
+      radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.10) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, rgba(34, 211, 238, 0.08) 0px, transparent 50%),
+      radial-gradient(at 50% 100%, rgba(125, 211, 252, 0.06) 0px, transparent 50%);
+    background-attachment: fixed;
+  }
+
+  /* Light mode overrides */
+  html:not(.dark) body {
+    @apply bg-white text-slate-900;
+    background-image: 
+      radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.06) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, rgba(34, 211, 238, 0.06) 0px, transparent 50%),
+      radial-gradient(at 50% 100%, rgba(125, 211, 252, 0.04) 0px, transparent 50%);
+  }
+
+  :root {
+    --bg-color: #080b13;
+    --text-primary: #f8fafc;
+  }
+
+  html:not(.dark) :root {
+    --bg-color: #ffffff;
+    --text-primary: #0f172a;
+  }
+}
+
 @layer utilities {
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.08); border-radius: 9999px; }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.15); }
+  .custom-scrollbar { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.08) transparent; }
+
+  html:not(.dark) .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.12);
   }
-  .no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+  html:not(.dark) .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.2);
   }
-}
-
-/* Custom thin scrollbar for content areas */
-.custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
-}
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.2);
-  border-radius: 9999px;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.4);
-}
-.custom-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.2) transparent;
-}
-
-:root {
-  --bg-color: #F8FAFF;
-  --text-primary: #0F172A;
-  --accent-sky: #0EA5E9;
-  --glass-bg: rgba(255, 255, 255, 0.85);
-  --glass-border: rgba(255, 255, 255, 0.5);
-  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.08), inset 0 0 0 1px rgba(255, 255, 255, 0.4);
-}
-
-.dark {
-  --bg-color: #0F172A;
-  --text-primary: #F8FAFC;
-  --accent-sky: #38BDF8;
-  --glass-bg: rgba(30, 41, 59, 0.75);
-  --glass-border: rgba(255, 255, 255, 0.15);
-  --glass-shadow: 0 12px 48px 0 rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.1);
-}
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background-color: var(--bg-color);
-  color: var(--text-primary);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  transition: background-color 0.5s ease, color 0.5s ease;
-}
-
-@layer components {
-  .glass-card-apple {
-    background-color: var(--glass-bg);
-    backdrop-filter: blur(25px) saturate(160%); /* Optimized blur */
-    -webkit-backdrop-filter: blur(25px) saturate(160%);
-    border: 1px solid var(--glass-border);
-    box-shadow: var(--glass-shadow);
-    transform: translateZ(0); /* GPU acceleration */
-    @apply transition-all duration-300;
+  html:not(.dark) .custom-scrollbar {
+    scrollbar-color: rgba(0, 0, 0, 0.12) transparent;
   }
-  
+
+  /* Premium glass panel effect */
   .glass-panel {
-    background-color: var(--glass-bg);
-    backdrop-filter: blur(30px) saturate(180%);
-    -webkit-backdrop-filter: blur(30px) saturate(180%);
-    border: 1px solid var(--glass-border);
-    transform: translateZ(0);
+    background: rgba(10, 22, 40, 0.7);
+    border: 1px solid rgba(56, 189, 248, 0.08);
+    backdrop-filter: blur(24px);
+  }
+
+  html:not(.dark) .glass-panel {
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(0, 0, 0, 0.06);
   }
 }
 
-/* Animations */
 @keyframes pulse-soft {
-  0%, 100% { opacity: 0.4; transform: scale(1); }
-  50% { opacity: 0.8; transform: scale(1.05); }
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.6; }
 }
 .animate-pulse-soft { animation: pulse-soft 4s ease-in-out infinite; }
 
-@keyframes float-slow {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-10px); }
+@keyframes logo-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.05); }
 }
-.animate-float-slow { animation: float-slow 8s ease-in-out infinite; }
-
-@keyframes spin-slow {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-.animate-spin-slow { animation: spin-slow 15s linear infinite; }
+.animate-logo-pulse { animation: logo-pulse 3s ease-in-out infinite; }

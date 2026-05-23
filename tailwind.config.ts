@@ -10,13 +10,39 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: "var(--bg-color)", // Dynamic based on theme
-        primary: "var(--text-primary)", // Dynamic text color
-        accent: "#60A5FA", // Sky blue
+        background: "var(--bg-color)",
+        primary: "var(--text-primary)",
+        accent: "#60A5FA",
         "accent-secondary": "#3B82F6",
         "text-secondary": "#64748B",
         success: "#28CD41",
-        slate: "#1C1C1E",
+        // Skyblue iOS accent palette
+        sky: {
+          50: '#f0f9ff',
+          100: '#e0f2fe',
+          200: '#bae6fd',
+          300: '#7dd3fc',
+          400: '#38bdf8',
+          500: '#0ea5e9',
+          600: '#0284c7',
+          700: '#0369a1',
+          800: '#075985',
+          900: '#0c4a6e',
+          950: '#082f49',
+        },
+        cyan: {
+          50: '#ecfeff',
+          100: '#cffafe',
+          200: '#a5f3fc',
+          300: '#67e8f9',
+          400: '#22d3ee',
+          500: '#06b6d4',
+          600: '#0891b2',
+          700: '#0e7490',
+          800: '#155e75',
+          900: '#164e63',
+          950: '#083344',
+        },
       },
       borderRadius: {
         'pill': '9999px',

@@ -1,5 +1,5 @@
 {
-  "name": "nextjs-base-starter",
+  "name": "omnia-ai",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -13,6 +13,7 @@
   "dependencies": {
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.4",
+    "@types/three": "^0.184.1",
     "clsx": "^2.1.1",
     "firebase": "^12.11.0",
     "framer-motion": "^12.38.0",
@@ -21,7 +22,8 @@
     "posthog-js": "^1.270.1",
     "react": "^19",
     "react-dom": "^19",
-    "tailwind-merge": "^3.5.0"
+    "tailwind-merge": "^3.5.0",
+    "three": "^0.184.0"
   },
   "devDependencies": {
     "@types/node": "^20",

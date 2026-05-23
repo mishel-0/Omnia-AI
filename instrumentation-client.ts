@@ -1,6 +1,2 @@
-import posthog from 'posthog-js'
-
-posthog.init("phc_v1zGl740rSRNUNCouxKTzOdK31AIcRRWXNf4VMpfa4y", {
-    api_host: "https://us.i.posthog.com",
-    defaults: '2025-05-24'
-});
+// No client-side analytics needed — B2B clinical platform
+// PostHog removed per B2B clinic-only policy
