@@ -20,6 +20,7 @@
 <p align="center">
   <a href="#research-status">Research Status</a> •
   <a href="#what-it-does">What It Does</a> •
+  <a href="#screenshots">Screenshots</a> •
   <a href="#the-model">The Model</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#download">Download</a> •
@@ -59,6 +60,29 @@ Omnia Pathology AI runs the full workflow a pathology core lab needs to grade pr
 | **In-app guidance** | A searchable Help Center (glossary + FAQ) and an 8-step guided tour, so a doctor never has to guess what a screen is for |
 
 Everything runs **fully local** — trial, patient, and slide data never leaves the machine it's installed on.
+
+## Screenshots
+
+<p align="center">
+  <img src="assets/screenshots/03-dashboard.png" alt="Trial dashboard — three trials with progress, status, and open-query badges" width="100%"/>
+  <br/><sub>Trial dashboard — portfolio totals, status, and open queries at a glance</sub>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/04-trial-detail.png" alt="AI analysis panel expanded with a simulated heatmap and the trust disclosure open" width="100%"/>
+  <br/><sub>AI analysis panel, expanded — prototype labelling and a "how this result was produced" disclosure on every result</sub>
+</p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="assets/screenshots/05-help-center.png" alt="Searchable Help Center with FAQ and clinical glossary"/><br/><sub align="center">Searchable Help Center — FAQ + clinical glossary</sub></td>
+    <td width="50%"><img src="assets/screenshots/07-training.png" alt="Model training page showing real detected hardware and dataset readiness"/><br/><sub>Model training — real hardware detection, honestly labelled as simulated</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="assets/screenshots/06-audit-trail.png" alt="21 CFR Part 11 style audit trail"/><br/><sub>Append-only audit trail, exportable as CSV</sub></td>
+    <td width="50%"><img src="assets/screenshots/01-install.png" alt="First-run install wizard"/><br/><sub>First-run install wizard</sub></td>
+  </tr>
+</table>
 
 ## The Model
 
