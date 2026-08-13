@@ -1,0 +1,152 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+# /build holds transient PyInstaller work dirs (build/pyinstaller/) AND the
+# committed DMG background art electron-builder needs at package time — only
+# ignore the transient part.
+/build/*
+!/build/dmg-background.png
+!/build/dmg-background@2x.png
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+!.env.example
+
+# model weights (large binary files)
+*.pth
+*.pt
+
+# build artifacts
+dist/
+dist-desktop/
+
+# scratch / experiments
+scratch/
+
+# databases (contain PHI / user data — never commit)
+*.db
+*.db-shm
+*.db-wal
+backups/
+
+# jupyter checkpoints
+.ipynb_checkpoints/
+
+# build artifacts
+installer/*.dmg
+installer/*.exe
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environments
+venv/
+.venv/
+
+# Notebooks (personal experiments)
+colab/
+notebooks/
+
+# Secrets
+data/.jwt_secret
+data/.phi_encryption_key
+license.key
+.mcp.json
+.kaggle
+
+# Runtime data (patients/trials/audit — never commit real or test PHI)
+data/patients.json
+data/trials.json
+data/training_runs.json
+data/slides/
+data/*.json
+!data/.gitkeep
+
+# Local scratch scripts
+scratch_probe.mjs
+
+# Personal icon backups (not part of the shipped build)
+desktop/icon-original-backup/
+
+# Logs
+*.log
+audit_log.jsonl
+
+# Archives
+*.zip
+*.tar.gz
+
+# IDE
+.vscode/
+.idea/
+.cursor/
+
+# Pickle / cache
+*.pkl
+
+# Binary test data (too large for git)
+data/test_dicom/
+data/lidc_test/
+
+# Generated audit/analysis reports
+ARIA_TEST_REPORT.md
+BUSINESS_LOGIC_BUG_ANALYSIS.md
+COMPREHENSIVE_BUG_ANALYSIS.md
+PACS-AUDIT-RESULTS.md
+RADIOLOGIST_AUDIT_REPORT.md
+
+# Easycode
+.easycode-ai/
+
+# Oxlint
+.oxlintrc.json
+
+# Kaggle config
+.kaggle
+
+# LIDC experiment scripts
+scripts/debug_seg*.py
+scripts/download_lidc*.py
+scripts/deep_inspect*.py
+scripts/find_annotations*.py
+scripts/lidc_pipeline*.py
+scripts/parse_lidc*.py
+scripts/prepare_lidc_data*.py
+scripts/step1_download*.py
+scripts/test_lidc*.py
+scripts/train_aria*.py
+scripts/train_lidc*.py
+scripts/validate_model*.py
+scripts/capture_screenshots*.js
