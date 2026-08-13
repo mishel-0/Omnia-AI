@@ -1,0 +1,114 @@
+name: Omnia AI — Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'           # v1.0.0, v1.1.0, etc.
+  workflow_dispatch:   # allow a manual run for testing the pipeline
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Node deps
+        run: npm ci
+
+      # Single source of truth: the same script a developer runs locally.
+      # It gates on the pre-release test suite, builds the Next.js standalone
+      # frontend, bundles the backend with PyInstaller, then packages the app —
+      # so CI can never drift from what's actually been verified on a machine.
+      - name: Build & package (mac)
+        run: bash scripts/build-desktop.sh mac
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+          USE_HARD_LINKS: false
+
+      # Attach straight to the GitHub Release rather than an Actions artifact.
+      # Release assets live in separate storage from Actions artifacts, so a
+      # ~270MB installer here never touches the (often very small) Actions
+      # artifact storage quota — the thing that broke every prior release.
+      - name: Publish DMG to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Omnia Pathology AI ${{ github.ref_name }}
+          body: See commit log for changes.
+          files: dist-desktop/*.dmg
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Node deps
+        run: npm ci
+
+      - name: Build & package (win)
+        shell: bash
+        run: bash scripts/build-desktop.sh win
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+          USE_HARD_LINKS: false
+
+      - name: Validate EXE
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path dist-desktop -Filter "*.exe" | Select-Object -First 1
+          if (-not $exe) { throw "No EXE found in dist-desktop/" }
+          Write-Host "EXE found: $($exe.Name) - $([math]::Round($exe.Length / 1MB, 0)) MB"
+          $header = [System.IO.File]::ReadAllBytes($exe.FullName)[0..1]
+          if ($header[0] -eq 0x4D -and $header[1] -eq 0x5A) {
+            Write-Host "Valid PE executable (MZ header confirmed)"
+          } else {
+            throw "Invalid PE header"
+          }
+
+      - name: Publish EXE to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Omnia Pathology AI ${{ github.ref_name }}
+          body: See commit log for changes.
+          files: dist-desktop/*.exe
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
