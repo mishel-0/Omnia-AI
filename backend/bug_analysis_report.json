@@ -1,0 +1,151 @@
+{
+  "files_analyzed": [
+    "backend/main.py",
+    "backend/orchestrator.py"
+  ],
+  "bugs": [
+    {
+      "severity": "CRITICAL",
+      "file": "backend/orchestrator.py",
+      "line": 410,
+      "title": "Unbounded memory growth — class-level dicts/list never cleaned",
+      "description": "AriaOrchestrator._results (dict), _futures (dict), _audit_log (list), _batch_progress (dict), and _analysis_times (dict) are class-level mutable containers that grow monotonically with every task submitted and every analysis performed. There is no eviction, TTL, or cap. Under sustained production load these will exhaust available memory, causing OOM kills or swap thrashing. The audit log alone grows 1 entry per full_analysis call (~1KB each); 1 million requests = ~1 GB resident memory.",
+      "fix": "Add a maximum size cap on _audit_log (e.g., collections.deque(maxlen=10000)), implement TTL-based eviction on _results/_futures (remove entries older than 1 hour or after status is 'completed'/'failed'), or switch to a database-backed persistence layer."
+    },
+    {
+      "severity": "CRITICAL",
+      "file": "backend/main.py",
+      "line": 145,
+      "title": "Grad-CAM get_heatmap() is NOT thread-safe despite thread-local storage",
+      "description": "ResNet.get_heatmap() registers forward/backward hooks on self.layer4[-1].conv2, a single shared Conv2d layer. While the hook closure writes to self._local (threading.local()), the PyTorch hook system adds hooks to a shared list on the module. If two threads call get_heatmap() concurrently: (A) self.zero_grad() zeroes gradients globally — interfering with other in-flight backward() calls; (B) multiple hooks from different threads will fire on the same forward/backward pass, each writing to its own thread-local storage but reading from a forward pass that may have triggered extraneous hooks; (C) the backward() call computes gradients that may be corrupted by other threads' zero_grad(). This can produce silently wrong heatmaps or undefined behavior.",
+      "fix": "Wrap get_heatmap() in a threading.Lock (per-model-instance lock), or create a separate model copy per thread, or use torch's no_grad() and hand-compute Grad-CAM without hooks (e.g., using model.layer4 output directly). Add @torch.no_grad() decorator on the forward pass inside get_heatmap where gradients aren't needed for parameter updates."
+    },
+    {
+      "severity": "CRITICAL",
+      "file": "backend/orchestrator.py",
+      "line": 406,
+      "title": "Shared mutable class state has no thread synchronization",
+      "description": "AriaOrchestrator uses class-level shared collections (_results, _futures, _audit_log, _batch_progress) accessed from a ThreadPoolExecutor (max_workers=4). submit_task(), _run_bot(), get_result(), and run_full_analysis() all read/write these dicts without any locks, semaphores, or atomic operations. While CPython's GIL prevents concurrent dict corruption on simple assignments, there are logical races: (1) submit_task sets status='pending', then _run_bot sets status='running' — a concurrent get_result may see stale 'pending'; (2) _audit_log.append() runs from the thread pool while get_audit_log() iterates from the main thread, risking ConcurrentModification-style errors; (3) _batch_progress dict and _results dict are accessed without coordination.",
+      "fix": "Use threading.Lock for all writes to shared state. Wrap cls._results, cls._futures, cls._audit_log in a Lock-protected context manager or use queue.Queue for task dispatch and a thread-safe dict (or just add @classmethod-level locks). Consider converting to instance-level (not class-level) state scoped per application lifecycle."
+    },
+    {
+      "severity": "HIGH",
+      "file": "backend/orchestrator.py",
+      "line": 1256,
+      "title": "DICOM PixelSpacing parsed with wrong backslash split pattern",
+      "description": "The code splits pixel spacing with `ps_str.split(\"\\\\\\\\\")` — 4 backslash characters in the split pattern. DICOM PixelSpacing is a DecimalString with a single backslash (\\\\) separator, e.g., \"0.5\\\\0.5\" (one backslash). The actual Python string literal \"\\\\\\\\\" produces a string of 4 backslashes, so the split will never match the single backslash in DICOM data. This causes lesion size estimation to always fall back to the default 0.5mm/pixel instead of using the actual scanner pixel spacing, producing incorrect physical measurement estimates for non-default scanners.",
+      "fix": "Change to `ps_str.split(\"\\\\\")` (a single backslash). Better yet, use pydicom's native MultiValue API: if hasattr(ds, 'PixelSpacing'): spacing = ds.PixelSpacing; PIXEL_SPACING_MM = float(spacing[0]) if isinstance(spacing, (list, tuple)) else float(spacing). Avoid str() conversion and manual splitting."
+    },
+    {
+      "severity": "HIGH",
+      "file": "backend/orchestrator.py",
+      "line": 54,
+      "title": "ImportError on radiomics module crashes entire orchestrator import",
+      "description": "Line 54 does `from backend.radiomics import RadiomicsEngine, extract_radiomics` at module level without a try/except. If `backend/radiomics.py` is missing, has a syntax error, or has missing dependencies (e.g., scikit-image, pyradiomics), the entire orchestrator.py import fails — killing all routes that depend on it (full_analysis, report, etc.), not just radiomics functionality. There is no graceful degradation path.",
+      "fix": "Wrap the radiomics import in try/except ImportError with a module-level flag `_radiomics_available = False`. In bot_radiomics, check the flag at runtime and return a clear error rather than crashing at import time. This ensures non-radiomics features continue working."
+    },
+    {
+      "severity": "HIGH",
+      "file": "backend/orchestrator.py",
+      "line": 54,
+      "title": "extract_radiomics imported but never called (dead code)",
+      "description": "The standalone function `extract_radiomics` is imported from backend.radiomics on line 54 but never referenced anywhere in orchestrator.py. Only `RadiomicsEngine.extract_all()` and `RadiomicsEngine.texture_interpretation()` are used (lines 1018, 1028). This unused import adds unnecessary module load overhead and is misleading.",
+      "fix": "Remove `extract_radiomics` from the import statement: `from backend.radiomics import RadiomicsEngine`."
+    },
+    {
+      "severity": "HIGH",
+      "file": "backend/orchestrator.py",
+      "line": 753,
+      "title": "bot_drive() accepts unvalidated path — potential command injection",
+      "description": "bot_drive(path: str) passes the `path` argument directly to `subprocess.run([\"rclone\", \"cat\", path], ...)`. If this method is ever exposed to user-controlled input (via an API route or config), a malicious path like `gdrive:file; rm -rf /` or `gdrive:file & evil_command` could execute arbitrary commands through shell injection. While bot_drive is currently dead code (never submitted as a task), it represents a latent vulnerability.",
+      "fix": "If bot_drive is needed, validate that `path` matches a strict pattern (e.g., only alphanumerics, colons, slashes, dots, underscores) and reject anything containing shell metacharacters. Use `shlex.quote(path)` defensively. Consider removing the dead code entirely if not planned for use."
+    },
+    {
+      "severity": "HIGH",
+      "file": "backend/orchestrator.py",
+      "line": 61,
+      "title": "DEEPSEEK_API_KEY not validated at startup",
+      "description": "`DEEPSEEK_API_KEY = os.environ.get(\"DEEPSEEK_API_KEY\", \"\")` defaults to empty string if the env var is missing. There is no startup check or validation. A deployment missing this env var will fail on every generate_report() call with an authentication error from the DeepSeek API. The fallback _local_fallback only kicks in on network errors, not auth errors (which return 401/403 HTTP errors, not URLError). The error message at line 102-104 catches the URLError but doesn't distinguish auth failures from transient network issues.",
+      "fix": "Add a module-level startup check: `if not DEEPSEEK_API_KEY: print(\"[WARN] DEEPSEEK_API_KEY not set — report generation will use local fallback only\")`. Also handle HTTP 401/403 in _call_api by catching the HTTPError (which is a subclass of URLError) and falling back gracefully."
+    },
+    {
+      "severity": "HIGH",
+      "file": "backend/orchestrator.py",
+      "line": 143,
+      "title": "DeepSeek API error handling doesn't distinguish auth failures from network errors",
+      "description": "In DeepSeekClient._call_api(), line 102 catches `URLError` which does NOT include HTTP 401/403 responses — those raise `HTTPError` (a subclass of URLError in urllib). The except clause correctly catches it because HTTPError inherits from URLError. However, the error message just says 'API call failed' and re-raises. The caller at line 200 catches `Exception` generically and falls back to _local_fallback. But a 401 Unauthorized due to missing/bad API key won't be distinguished from a transient 503, and the fallback is triggered silently without clear logging of which error occurred. This makes debugging deployment issues harder.",
+      "fix": "Add specific handling: catch HTTPError separately with status code logging, and re-raise with a descriptive message. Log the HTTP status code and response body snippet for debugging."
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "backend/orchestrator.py",
+      "line": 406,
+      "title": "Four dead bot methods and two dead batch methods — ~180 lines of dead code",
+      "description": "The following class methods are defined but never called anywhere in the codebase: bot_drive (line 753), bot_compare (line 804), bot_export (line 858), create_batch (line 468), get_batch_status (line 483). Additionally, bot_health() is called directly from main.py (not via submit_task), which is correct. The bot_3d method (line 599) IS reachable via submit_task('3d'). These dead methods collectively represent ~180 lines of untested, unexercised code that adds cognitive load and maintenance burden.",
+      "fix": "Remove dead methods (bot_drive, bot_compare, bot_export, create_batch, get_batch_status) or move them to an 'extensions' module with explicit feature flags. Keep bot_3d as it is actively dispatched."
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "backend/orchestrator.py",
+      "line": 1158,
+      "title": "Busy-wait polling loop blocks thread and wastes CPU",
+      "description": "run_full_analysis() uses a busy-wait loop `while True: ... time.sleep(0.05)` (lines 1159-1164 and 1320-1324) to poll for task completion. This pattern: (1) blocks the calling thread for the entire duration of all parallel analyses; (2) wastes CPU waking up 20 times/second per request; (3) if the calling thread is from FastAPI's thread pool, it occupies a worker for potentially seconds to minutes. Under concurrent load, this exhausts the thread pool and causes request queuing.",
+      "fix": "Use `Future.result(timeout=...)` with a timeout directly instead of polling: collect all futures from submit_task, then call `future.result()` on each. This blocks efficiently without polling. Or use `concurrent.futures.as_completed()` for streaming results as they finish."
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "backend/main.py",
+      "line": 31,
+      "title": "Env file loader silently swallows all errors",
+      "description": "The `.env`/`.env.local` file loader (lines 15-32) wraps the entire file-reading loop in `try/except Exception: pass`. This means any I/O error, encoding error, malformed line, or otherwise corrupted env file will fail silently with no log message. Developers or operators won't know if env vars weren't loaded.",
+      "fix": "Add logging for the exception: `except Exception as e: print(f\"[WARN] Error loading {env_path}: {e}\")`. This provides debuggability while still not crashing on bad env files."
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "backend/orchestrator.py",
+      "line": 1124,
+      "title": "Region matching rounds to nearest integer — false positives/negatives in comparison",
+      "description": "compare_with_prior() matches suspicious regions by rounding cx/cy to nearest integer (line 1124: `return (round(r.get(\"cx\", 0), 0), round(r.get(\"cy\", 0), 0))`). Two regions that are slightly more than 0.5px apart in either axis will be treated as completely different regions (new or resolved), even though they likely represent the same lesion. Conversely, truly different regions very close together (<1px) will be incorrectly matched. This makes longitudinal comparison unreliable for subtle lesion changes.",
+      "fix": "Replace exact integer rounding with a proximity-based matching algorithm: for each region in current scan, find the nearest region in prior scan within a configurable radius (e.g., 10px). Use Euclidean distance and a match threshold. Report unmatched regions as new/resolved."
+    },
+    {
+      "severity": "MEDIUM",
+      "file": "backend/orchestrator.py",
+      "line": 966,
+      "title": "Accessing private _max_workers attribute is fragile",
+      "description": "bot_health() accesses `cls._executor._max_workers` (line 967) to report the thread pool size. The `_max_workers` attribute is prefixed with underscore, indicating it's a private implementation detail of ThreadPoolExecutor. This could change between Python versions (e.g., the attribute was renamed in some Python 3.x versions internally).",
+      "fix": "Use `cls._executor._max_workers` only if available, with a fallback. Or store max_workers explicitly when creating the executor: `AriaOrchestrator._max_workers = 4` alongside `_executor = ThreadPoolExecutor(max_workers=4, ...)`."
+    },
+    {
+      "severity": "LOW",
+      "file": "backend/main.py",
+      "line": 89,
+      "title": "threading import positioned mid-file, not at top",
+      "description": "`import threading` appears at line 89, well after other standard library imports (os, sys, io, json, base64) at lines 6-48. This is a PEP8 violation (imports should be at the top of the file) and can cause confusion about module dependencies. It works because Python allows imports anywhere, but it's non-standard.",
+      "fix": "Move `import threading` to the top import section (before the third-party imports, around line 6-8)."
+    },
+    {
+      "severity": "LOW",
+      "file": "backend/main.py",
+      "line": 656,
+      "title": "random module imported only for exception-handler fallback data",
+      "description": "`import random` is inside the except block of get_system_metrics() (line 656) and only used to generate fake CPU metrics when the real sysctl/vm_stat commands fail. Importing inside an exception handler is unusual and indicates the fallback path returns synthetic data that could mislead users monitoring system health.",
+      "fix": "Move `import random` to the module top level. Consider logging a warning when fallback metrics are used so operators aren't debugging against fake data."
+    },
+    {
+      "severity": "LOW",
+      "file": "backend/main.py",
+      "line": 233,
+      "title": "Docstring typo in config validation comment",
+      "description": "Line 233 print statement says 'malignant_bias' suppressing 'Malignant' class — but the message says 'malignant' (missing 'n') consistently. This is cosmetic but could confuse operators reading logs. The word 'Re-verification' also uses a non-standard hyphen.",
+      "fix": "Fix typo: 'malignant' → 'malignant' and 're-verification' → 're verification' or 're-verification'."
+    }
+  ],
+  "summary": {
+    "critical": 3,
+    "high": 6,
+    "medium": 5,
+    "low": 3,
+    "total": 17
+  }
+}
