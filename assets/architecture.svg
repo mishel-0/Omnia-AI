@@ -1,0 +1,63 @@
+<svg viewBox="0 0 980 460" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0B1220"/>
+      <stop offset="100%" stop-color="#111A2E"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5B8DEF"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="980" height="460" rx="20" fill="url(#bg)"/>
+
+  <!-- Outer app shell -->
+  <rect x="40" y="40" width="900" height="380" rx="18" fill="none" stroke="#2A3A5C" stroke-width="1.5" stroke-dasharray="4 5"/>
+  <text x="66" y="72" fill="#7C8DB5" font-size="13" font-weight="600" letter-spacing="0.5">OMNIA PATHOLOGY AI.APP  —  ELECTRON (CHROMIUM)</text>
+
+  <!-- Frontend box -->
+  <rect x="80" y="110" width="380" height="270" rx="16" fill="#141E36" stroke="#2E4270" stroke-width="1.5"/>
+  <text x="106" y="146" fill="#EAF0FF" font-size="17" font-weight="700">Next.js 15 Frontend</text>
+  <text x="106" y="168" fill="#7C8DB5" font-size="12.5">React 19 · TypeScript · Tailwind</text>
+
+  <g font-size="13" fill="#C6D2F0">
+    <circle cx="112" cy="200" r="3" fill="#5B8DEF"/>
+    <text x="126" y="204">Trial &amp; patient dashboard</text>
+    <circle cx="112" cy="228" r="3" fill="#5B8DEF"/>
+    <text x="126" y="232">Slide upload &amp; AI analysis view</text>
+    <circle cx="112" cy="256" r="3" fill="#5B8DEF"/>
+    <text x="126" y="260">Model training &amp; hardware profile</text>
+    <circle cx="112" cy="284" r="3" fill="#5B8DEF"/>
+    <text x="126" y="288">Audit trail &amp; CSV/PDF export</text>
+    <circle cx="112" cy="312" r="3" fill="#5B8DEF"/>
+    <text x="126" y="316">Help Center — guide + glossary + FAQ</text>
+  </g>
+
+  <rect x="106" y="336" width="328" height="30" rx="8" fill="#0E1830" stroke="#2E4270"/>
+  <text x="120" y="356" fill="#9DB0DE" font-size="11.5" font-weight="600">HTTP · localhost:3000 → :8000</text>
+
+  <!-- Backend box -->
+  <rect x="520" y="110" width="380" height="270" rx="16" fill="#141E36" stroke="#2E4270" stroke-width="1.5"/>
+  <text x="546" y="146" fill="#EAF0FF" font-size="17" font-weight="700">Python Backend</text>
+  <text x="546" y="168" fill="#7C8DB5" font-size="12.5">FastAPI · packaged with PyInstaller</text>
+
+  <g font-size="13" fill="#C6D2F0">
+    <circle cx="552" cy="200" r="3" fill="#59C08C"/>
+    <text x="566" y="204">RBAC auth + session tokens</text>
+    <circle cx="552" cy="228" r="3" fill="#59C08C"/>
+    <text x="566" y="232">Trials · patients · slides (atomic JSON)</text>
+    <circle cx="552" cy="256" r="3" fill="#59C08C"/>
+    <text x="566" y="260">Append-only audit log (21 CFR Part 11)</text>
+    <circle cx="552" cy="284" r="3" fill="#59C08C"/>
+    <text x="566" y="288">Analysis engine (prototype) + training job</text>
+    <circle cx="552" cy="312" r="3" fill="#59C08C"/>
+    <text x="566" y="316">Hardware detection (stdlib only)</text>
+  </g>
+
+  <rect x="546" y="336" width="328" height="30" rx="8" fill="#0E1830" stroke="#2E4270"/>
+  <text x="560" y="356" fill="#9DB0DE" font-size="11.5" font-weight="600">Local disk only · no outbound network</text>
+
+  <!-- Connector -->
+  <line x1="460" y1="245" x2="520" y2="245" stroke="#5B8DEF" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="520" y1="265" x2="460" y2="265" stroke="#5B8DEF" stroke-width="2" marker-end="url(#arrow)"/>
+</svg>
