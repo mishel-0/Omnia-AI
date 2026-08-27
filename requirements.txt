@@ -4,3 +4,24 @@ python-dotenv>=1.0.0
 python-multipart>=0.0.9
 reportlab>=4.0.0
 uvicorn[standard]>=0.22.0
+
+# Prostate grading model (backend/grading_model.py)
+torch>=2.0.0
+torchvision>=0.15.0
+openslide-python>=1.4.0
+# Prebuilt OpenSlide C libraries for macOS, Linux and Windows. openslide-python
+# loads the native library via ctypes at import time and cannot pip-install it
+# itself; before this, Windows had no way to get one, so a Windows build
+# produced a backend that could not open a single slide. openslide-python 1.4+
+# picks this up automatically when it is present.
+openslide-bin>=4.0.1
+opencv-python-headless>=4.8.0
+numpy>=1.24.0
+
+# Cheminformatics for the investigational-product profile
+# (backend/drug_profile.py): SMILES validation, descriptors, 2D depiction.
+rdkit>=2024.3.1
+# openslide-bin above supplies the OpenSlide C library on all three
+# platforms, so no system package is required for a packaged build. A
+# source checkout on macOS may still prefer Homebrew's copy
+# (`brew install openslide`); omnia-backend.spec bundles whichever is found.

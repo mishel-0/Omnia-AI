@@ -86,18 +86,60 @@ jobs:
           NEXT_TELEMETRY_DISABLED: 1
           USE_HARD_LINKS: false
 
-      - name: Validate EXE
+      # A PE-header check only proves the file is a Windows binary. It passed
+      # happily for builds whose backend could not load OpenSlide and so could
+      # not open a single slide — the app's entire purpose. This actually runs
+      # the bundled backend and asks it whether its own dependencies loaded.
+      - name: Smoke test the bundled backend
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path dist -Filter "omnia-backend*.exe" | Select-Object -First 1
+          if (-not $exe) { throw "No backend executable found in dist/" }
+          Write-Host "Starting $($exe.Name) ($([math]::Round($exe.Length / 1MB, 0)) MB)..."
+
+          $env:OMNIA_DATA_DIR = "$env:RUNNER_TEMP\omnia-smoke"
+          $env:PORT = "8123"
+          $proc = Start-Process -FilePath $exe.FullName -PassThru -NoNewWindow
+
+          try {
+            # First start unpacks the onefile bundle, which is slow on CI.
+            $ready = $false
+            foreach ($i in 1..180) {
+              Start-Sleep -Seconds 1
+              try {
+                $h = Invoke-RestMethod -Uri "http://127.0.0.1:8123/health" -TimeoutSec 3
+                if ($h.status -eq "ok") { $ready = $true; Write-Host "Backend answered after ${i}s"; break }
+              } catch { }
+            }
+            if (-not $ready) { throw "Backend never became healthy" }
+
+            # preflight reports the real state of every dependency grading
+            # needs: storage, the OpenSlide native library, torch, and the
+            # bundled model checkpoint.
+            $pf = Invoke-RestMethod -Uri "http://127.0.0.1:8123/api/system/preflight" -TimeoutSec 30
+            $failed = @()
+            foreach ($c in $pf.checks) {
+              $mark = if ($c.ok) { "PASS" } else { if ($c.fatal) { "FAIL" } else { "WARN" } }
+              Write-Host ("  {0,-5} {1,-12} {2}" -f $mark, $c.key, $c.detail)
+              if (-not $c.ok -and $c.fatal) { $failed += $c.key }
+            }
+            if ($failed.Count -gt 0) {
+              throw "Bundled backend is missing required components: $($failed -join ', ')"
+            }
+            Write-Host "All grading-critical components loaded inside the Windows build."
+          }
+          finally {
+            if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+          }
+
+      - name: Validate installer
         shell: pwsh
         run: |
           $exe = Get-ChildItem -Path dist-desktop -Filter "*.exe" | Select-Object -First 1
-          if (-not $exe) { throw "No EXE found in dist-desktop/" }
-          Write-Host "EXE found: $($exe.Name) - $([math]::Round($exe.Length / 1MB, 0)) MB"
+          if (-not $exe) { throw "No installer found in dist-desktop/" }
           $header = [System.IO.File]::ReadAllBytes($exe.FullName)[0..1]
-          if ($header[0] -eq 0x4D -and $header[1] -eq 0x5A) {
-            Write-Host "Valid PE executable (MZ header confirmed)"
-          } else {
-            throw "Invalid PE header"
-          }
+          if ($header[0] -ne 0x4D -or $header[1] -ne 0x5A) { throw "Invalid PE header" }
+          Write-Host "Installer: $($exe.Name) - $([math]::Round($exe.Length / 1MB, 0)) MB"
 
       - name: Publish EXE to release
         if: startsWith(github.ref, 'refs/tags/v')
