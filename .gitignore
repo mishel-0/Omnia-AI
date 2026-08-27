@@ -39,9 +39,14 @@ yarn-error.log*
 .env*
 !.env.example
 
-# model weights (large binary files)
+# Model weights. Checkpoints are large binaries and generally do not belong
+# in git — with one exception: the shipped grading model IS the product. The
+# PyInstaller spec requires it at build time, so excluding it meant the repo
+# could not build from source and every CI release would fail. At 17 MB it is
+# comfortably inside GitHub's limits.
 *.pth
 *.pt
+!backend/models/omnia_prostate_v1.pt
 
 # build artifacts
 dist/
@@ -150,3 +155,29 @@ scripts/train_aria*.py
 scripts/train_lidc*.py
 scripts/validate_model*.py
 scripts/capture_screenshots*.js
+
+# ── Runtime data — never commit ──
+# The application writes trials, patients, slides, audit logs and session
+# tokens here. This is clinical data: it must never reach a repository,
+# public or private.
+/data/
+license.key
+*.svs
+
+# ── Build outputs ──
+# Installers are published as GitHub Release assets, not committed. The DMG
+# alone is ~470MB, well past GitHub's 100MB per-file limit.
+/dist/
+/dist-desktop/
+/build/pyinstaller/
+tsconfig.tsbuildinfo
+
+# ── Local scratch ──
+/scratch/
+scratch_*.mjs
+*.log
+
+# ── Model checkpoints produced by on-site fine-tuning ──
+# The shipped model is committed; models trained on a customer's own slides
+# are theirs and stay local.
+/data/models/

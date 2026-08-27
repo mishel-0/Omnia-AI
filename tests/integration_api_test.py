@@ -18,9 +18,16 @@ import subprocess
 import sys
 import tempfile
 import time
+import threading
+import re
 import shutil
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Some checks inspect the backend modules directly (e.g. asserting that no
+# simulated training code remains), which needs the package importable here
+# and not only inside the server subprocess.
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 
 def _free_port():
@@ -39,6 +46,13 @@ def _start_server():
     global _SERVER
     env = {**os.environ, "OMNIA_DATA_DIR": _DATA_DIR, "PORT": str(PORT)}
     env.pop("OMNIA_DEV_RELOAD", None)
+    # Test fixtures upload dummy bytes as ".svs" files (see upload_file()) —
+    # real openslide I/O correctly rejects those, which is right behavior
+    # outside tests but breaks every test whose setup needs a slide to
+    # reach "analyzed". This opts only this test server into a stubbed
+    # grading result; see grading_model.predict()'s docstring for why this
+    # must never be set anywhere else.
+    env["OMNIA_TEST_FAKE_GRADING"] = "1"
     _SERVER = subprocess.Popen(
         [sys.executable, "-m", "backend.main"],
         cwd=_ROOT, env=env,
@@ -96,6 +110,20 @@ def req(method, path, token=None, body=None, raw_body=None, content_type="applic
             return e.code, txt
     except Exception as e:
         return 0, str(e)
+
+
+def req_raw(method, path, token=None):
+    """Like req(), but returns raw bytes — for binary endpoints (PNGs) where
+    decoding as text would corrupt the payload."""
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    r = urllib.request.Request(BASE + path, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(r) as resp:
+            return resp.status, resp.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read()
+    except Exception as e:
+        return 0, str(e).encode()
 
 
 def check(name, condition, detail=""):
@@ -176,8 +204,18 @@ check("B2 another users password rejected", s == 400, f"got {s}")
 print("\n=== C. INPUT VALIDATION / ORPHANS ===")
 s, r = req("POST", "/api/trials/NONEXISTENT/patients", token=ADMIN, body={"patient_id": "GHOST"})
 check("C1 patient under nonexistent trial rejected", s == 404, f"got {s} -> orphan created: {r if s==200 else ''}")
+# A blank subject code no longer rejects the record: the site simply has not
+# assigned one yet. The record must still be filed against a real registered
+# patient rather than an empty string, which is what this now asserts.
 s, r = req("POST", f"/api/trials/{TID}/patients", token=ADMIN, body={"patient_id": ""})
-check("C2 empty patient_id rejected", s in (400, 422), f"got {s}")
+check("C2 blank subject code still yields an identified patient",
+      s == 200 and r.get("patient_uid", "").startswith("OMN-") and r.get("patient_id"),
+      f"got {s} {r}")
+# But an unknown patient_uid must never silently create a stray record.
+s, r = req("POST", f"/api/trials/{TID}/patients", token=ADMIN,
+           body={"patient_uid": "OMN-ZZZZ-ZZZZ"})
+check("C2b unknown patient ID is rejected, not silently registered",
+      s in (400, 404), f"got {s} {r}")
 s, r = req("POST", "/api/trials/", token=ADMIN, body={"name": "", "sponsor": "", "drug": "", "indication": ""})
 check("C3 empty trial name rejected", s in (400, 422), f"got {s}")
 s, r = req("POST", f"/api/trials/{TID}/patients", token=ADMIN, body={"patient_id": "P-001"})
@@ -330,6 +368,444 @@ check("L3 oversized trial name rejected", s == 400, f"got {s}")
 s, runs = req("GET", "/api/training/runs", token=ADMIN)
 stuck = [r for r in runs if r.get("state") == "running"] if isinstance(runs, list) else []
 check("L4 no training run left stuck in 'running'", len(stuck) == 0, f"{len(stuck)} stuck")
+
+print("\n=== M. SLIDE INTEGRITY / VIEWER ===")
+# An empty upload must be refused outright — it can never be analysed, and
+# accepting it attaches an unusable file to a patient record.
+s, _ = upload_file(f"/api/trials/patients/{PUUID}/slides", ADMIN, "empty.svs", content=b"")
+check("M1 empty slide upload rejected", s == 400, f"got {s}")
+
+# Thumbnail endpoint must enforce the same auth as everything else — slide
+# images are patient data, not public assets.
+s, _ = req("GET", f"/api/trials/patients/{PUUID}/slides/{SLIDE}/thumbnail")
+check("M2 thumbnail requires auth", s in (401, 403), f"got {s}")
+
+s, _ = req("GET", f"/api/trials/patients/{PUUID}/slides/does-not-exist/thumbnail", token=ADMIN)
+check("M3 thumbnail for unknown slide -> 404", s == 404, f"got {s}")
+
+# The analysis result must never carry fabricated values for fields the
+# model cannot predict. This is the guard against a future change quietly
+# reintroducing mock data behind a real "ai" label.
+s, p_after = req("GET", f"/api/trials/patients/{PUUID}", token=ADMIN)
+_an = None
+if s == 200:
+    _an = next((sl for sl in p_after.get("slides", []) if sl.get("status") == "analyzed"), None)
+if _an is not None:
+    _fabricated = [
+        k for k in ("size_mm", "tumor_involvement_pct", "perineural_invasion",
+                    "lymphovascular_invasion", "cribriform_pattern", "suspicious_regions")
+        if _an.get(k) is not None
+    ]
+    check("M4 unassessed fields stay null (no fabricated findings)",
+          not _fabricated, f"fabricated values present: {_fabricated}")
+    check("M5 biomarkers not fabricated", not _an.get("biomarkers"),
+          f"got {_an.get('biomarkers')}")
+    check("M6 analysed slide reports a real source", _an.get("analysis_source") == "ai",
+          f"got {_an.get('analysis_source')}")
+else:
+    check("M4 unassessed fields stay null (no fabricated findings)", False, "no analysed slide found")
+
+print("\n=== N. SUBJECT TIMELINE (longitudinal container) ===")
+# Same subject, several visits, created deliberately out of order — the
+# container must order them by visit label, not by insertion.
+s, ltrial = req("POST", "/api/trials/", token=ADMIN,
+                body={"name": "LONGI", "sponsor": "S", "drug": "D", "indication": "Prostate"})
+LTID = ltrial["id"]
+for _v in ["Week 12", "Baseline", "Week 24"]:
+    s, _lp = req("POST", f"/api/trials/{LTID}/patients", token=ADMIN,
+                 body={"patient_id": "S001", "visit": _v})
+    s, _ls = upload_file(f"/api/trials/patients/{_lp['id']}/slides", ADMIN, f"{_v}.svs")
+    req("POST", f"/api/trials/patients/{_lp['id']}/slides/{_ls['id']}/analyze", token=ADMIN)
+
+s, _tl = req("GET", f"/api/trials/{LTID}/subjects/S001/timeline", token=ADMIN)
+_order = [t["visit"] for t in _tl["timepoints"]] if s == 200 else []
+check("N1 visits ordered chronologically, not by insertion",
+      _order == ["Baseline", "Week 12", "Week 24"], f"got {_order}")
+check("N2 all visits grouped under one subject",
+      s == 200 and _tl.get("visit_count") == 3, f"got {_tl.get('visit_count') if s == 200 else s}")
+check("N3 unsigned grades marked provisional",
+      s == 200 and _tl.get("provisional") is True, f"got {_tl.get('provisional') if s == 200 else s}")
+# The clinical guardrail: this must never present itself as treatment response.
+_txt = json.dumps(_tl).lower() if s == 200 else ""
+check("N4 timeline carries its confounder caveats",
+      s == 200 and len(_tl.get("caveats", [])) >= 3, f"got {len(_tl.get('caveats', [])) if s == 200 else s}")
+check("N5 timeline makes no drug-efficacy claim",
+      "drug is working" not in _txt and "responding to treatment" not in _txt,
+      "timeline text asserts treatment response")
+
+s, _subs = req("GET", f"/api/trials/{LTID}/subjects", token=ADMIN)
+check("N6 subjects list collapses visits into one row",
+      s == 200 and len(_subs) == 1 and _subs[0]["visit_count"] == 3, f"got {_subs if s == 200 else s}")
+s, _ = req("GET", f"/api/trials/{LTID}/subjects/S001/timeline")
+check("N7 timeline requires auth", s in (401, 403), f"got {s}")
+s, _ = req("GET", f"/api/trials/{LTID}/subjects/NOSUCH/timeline", token=ADMIN)
+check("N8 unknown subject -> 404", s == 404, f"got {s}")
+
+print("\n=== O. COHORT ANALYTICS ===")
+s, _ci = req("GET", f"/api/trials/{LTID}/insights", token=ADMIN)
+check("O1 cohort insights computed", s == 200 and _ci.get("subject_count") == 1,
+      f"got {s} / {_ci.get('subject_count') if s == 200 else ''}")
+check("O2 unsigned slides surfaced as an action item",
+      s == 200 and any("not yet signed" in a["label"] for a in _ci.get("action_items", [])),
+      "unsigned backlog not reported")
+check("O3 grade distribution covers all six grade groups",
+      s == 200 and len(_ci.get("grade_distribution", {})) == 6,
+      f"got {_ci.get('grade_distribution') if s == 200 else s}")
+# The scope boundary is the point of this module — if it ever starts claiming
+# mechanism or efficacy, that is a scientific-integrity regression, not a
+# cosmetic one.
+_ctxt = json.dumps(_ci).lower() if s == 200 else ""
+check("O4 analytics carry an explicit scope note",
+      s == 200 and "cannot" in _ci.get("scope_note", "").lower(),
+      "scope note missing or does not state limits")
+check("O5 analytics make no drug-mechanism or efficacy claim",
+      all(p not in _ctxt for p in ("drug target", "mechanism of action",
+                                   "efficacy demonstrated", "drug is working",
+                                   "recommend targeting")),
+      "analytics assert drug mechanism or efficacy")
+s, _ = req("GET", f"/api/trials/{LTID}/insights")
+check("O6 insights require auth", s in (401, 403), f"got {s}")
+s, _ = req("GET", "/api/trials/NOSUCHTRIAL/insights", token=ADMIN)
+check("O7 insights for unknown trial -> 404", s == 404, f"got {s}")
+
+print("\n=== P. INVESTIGATIONAL PRODUCT / CHEMISTRY ===")
+# Aspirin — descriptors are published and independently checkable, so this
+# verifies the cheminformatics is really computing, not echoing input.
+s, _d = req("PUT", f"/api/trials/{LTID}/drug", token=ADMIN, body={
+    "name": "Aspirin", "code": "ASA", "drug_class": "NSAID",
+    "target": "COX-1/COX-2", "dose": "81 mg", "route": "Oral",
+    "smiles": "CC(=O)Oc1ccccc1C(=O)O"})
+_chem = _d.get("chemistry", {}) if s == 200 else {}
+check("P1 structure parsed and descriptors computed", _chem.get("valid") is True, f"got {_chem}")
+check("P2 molecular formula matches published value",
+      _chem.get("formula") == "C9H8O4", f"got {_chem.get('formula')}")
+check("P3 molecular weight matches published value",
+      _chem.get("molecular_weight") is not None and abs(_chem["molecular_weight"] - 180.16) < 0.05,
+      f"got {_chem.get('molecular_weight')}")
+
+s, _bad = req("PUT", f"/api/trials/{LTID}/drug", token=ADMIN, body={"smiles": "!!!not-a-molecule!!!"})
+check("P4 invalid structure rejected, not silently accepted",
+      s == 200 and _bad.get("chemistry", {}).get("valid") is False,
+      f"got {_bad.get('chemistry') if s == 200 else s}")
+# Restore a valid structure for the remaining checks.
+req("PUT", f"/api/trials/{LTID}/drug", token=ADMIN, body={"smiles": "CC(=O)Oc1ccccc1C(=O)O"})
+
+s, _png = req_raw("GET", f"/api/trials/{LTID}/drug/structure.png", token=ADMIN)
+check("P5 2D structure renders", s == 200 and _png[:4] == b"\x89PNG", f"got {s}")
+
+s, _ev = req("GET", f"/api/trials/{LTID}/evidence", token=ADMIN)
+check("P6 evidence summary returned", s == 200 and "observations" in _ev, f"got {s}")
+check("P7 evidence names specific missing inputs",
+      s == 200 and len(_ev.get("limits", [])) >= 4, f"got {len(_ev.get('limits', [])) if s == 200 else s}")
+# The core scientific guardrail for this feature.
+_evtxt = json.dumps(_ev).lower() if s == 200 else ""
+check("P8 evidence makes no efficacy verdict",
+      all(p not in _evtxt for p in ("the drug is working", "drug is effective",
+                                    "treatment is effective", "confirms efficacy")),
+      "evidence asserts an efficacy verdict")
+check("P9 evidence states the model ignores drug data",
+      s == 200 and "does not receive" in json.dumps(_ev.get("limits", [])).lower(),
+      "missing statement that grading is independent of drug metadata")
+s, _ = req("PUT", f"/api/trials/{LTID}/drug", body={"name": "X"})
+check("P10 drug record requires auth", s in (401, 403), f"got {s}")
+
+print("\n=== Q. RELEASE INTEGRITY / PREFLIGHT ===")
+# The installer, the API and package.json each used to carry their own
+# version literal and had drifted to three different numbers. Fail the build
+# if they diverge again — a user cannot report a bug against a version the
+# app is not actually running.
+_pkg_version = ""
+try:
+    with open(os.path.join(_ROOT, "package.json")) as _f:
+        _pkg_version = json.load(_f).get("version", "")
+except Exception as _e:
+    _pkg_version = f"<unreadable: {_e}>"
+s, _h = req("GET", "/health")
+check("Q1 API version matches package.json",
+      s == 200 and _h.get("version") == _pkg_version,
+      f"api={_h.get('version') if s == 200 else s} package.json={_pkg_version}")
+
+s, _pf = req("GET", "/api/system/preflight")
+check("Q2 preflight runs real environment checks",
+      s == 200 and len(_pf.get("checks", [])) >= 5, f"got {s}")
+check("Q3 preflight reports readiness", s == 200 and "ready" in _pf, f"got {s}")
+_keys = {c["key"] for c in _pf.get("checks", [])} if s == 200 else set()
+check("Q4 preflight covers the components slide grading depends on",
+      {"storage", "openslide", "model", "torch"} <= _keys, f"got {sorted(_keys)}")
+check("Q5 preflight marks grading-critical checks as blocking",
+      s == 200 and any(c["fatal"] for c in _pf.get("checks", [])),
+      "no check is marked fatal, so a broken install would look fine")
+
+print("\n=== R. TRIAL REGISTRATION FIELDS ===")
+
+# A trial registered with a protocol ID and phase must persist and return
+# them. Capturing a registry identifier that is dropped on write is worse
+# than not capturing it — the record looks authoritative and is not.
+s, _r = req("POST", "/api/trials/", token=ADMIN, body={
+    "name": "R-TRIAL", "sponsor": "Sp", "drug": "Dr", "indication": "Prostate",
+    "protocol_id": "NCT01234567", "phase": "Phase III"})
+check("R1 protocol ID and phase are stored",
+      s == 200 and _r.get("protocol_id") == "NCT01234567" and _r.get("phase") == "Phase III",
+      f"got {s} {_r}")
+
+_rid = _r.get("id") if s == 200 else None
+s, _got = req("GET", f"/api/trials/{_rid}", token=ADMIN)
+check("R2 protocol ID survives a read back",
+      s == 200 and _got.get("protocol_id") == "NCT01234567", f"got {s} {_got}")
+
+# Phase is a closed vocabulary. Free text makes cohorts unfilterable, so an
+# unrecognised value must be rejected rather than silently stored.
+s, _ = req("POST", "/api/trials/", token=ADMIN, body={
+    "name": "R-BAD", "sponsor": "Sp", "drug": "Dr", "indication": "Prostate",
+    "phase": "Phase XII"})
+check("R3 unknown phase is rejected", s == 400, f"expected 400, got {s}")
+
+# Both fields are optional: existing callers that omit them must still work.
+s, _r2 = req("POST", "/api/trials/", token=ADMIN, body={
+    "name": "R-MIN", "sponsor": "Sp", "drug": "Dr", "indication": "Prostate"})
+check("R4 trial without protocol ID or phase is still accepted",
+      s == 200 and _r2.get("protocol_id") == "" and _r2.get("phase") == "",
+      f"got {s} {_r2}")
+
+s, _ = req("POST", "/api/trials/", token=ADMIN, body={
+    "name": "R-LONG", "sponsor": "Sp", "drug": "Dr", "indication": "Prostate",
+    "protocol_id": "N" * 101})
+check("R5 over-long protocol ID is rejected", s == 400, f"expected 400, got {s}")
+
+# The required-field rules the dialog enforces client-side must also hold on
+# the server; a client is not a validation boundary.
+s, _ = req("POST", "/api/trials/", token=ADMIN, body={
+    "name": "   ", "sponsor": "Sp", "drug": "Dr", "indication": "Prostate"})
+check("R6 whitespace-only trial name is rejected", s == 400, f"expected 400, got {s}")
+
+print("\n=== S. PATIENT REGISTRY & CONTAINER ===")
+
+s, _p = req("POST", "/api/patients/", token=ADMIN,
+            body={"initials": "AB", "year_of_birth": 1958, "sex": "male"})
+_UID = _p.get("uid") if s == 200 else ""
+check("S1 patient ID is generated by the server",
+      s == 200 and _UID.startswith("OMN-") and len(_UID) == 13, f"got {s} {_p}")
+
+# The identifier carries a check character. The failure that matters is not
+# "not found" — it is a typo silently resolving to a different real patient.
+_bad = _UID[:-1] + ("A" if _UID[-1] != "A" else "B")
+s, _ = req("GET", f"/api/patients/{_bad}", token=ADMIN)
+check("S2 a mistyped patient ID is rejected, not resolved to someone else",
+      s == 404, f"expected 404 for {_bad}, got {s}")
+
+# Case and separators are forgiving; only the check character is not.
+s, _same = req("GET", f"/api/patients/{_UID.replace('-','').lower()}", token=ADMIN)
+check("S3 patient ID lookup tolerates case and missing separators",
+      s == 200 and _same.get("uid") == _UID, f"got {s}")
+
+# Profile must stay pseudonymised: no name field is accepted or stored.
+check("S4 profile stores no patient name",
+      "name" not in _p and "dob" not in _p, f"got keys {sorted(_p.keys())}")
+
+s, _ = req("POST", "/api/patients/", token=ADMIN, body={"year_of_birth": 1780})
+check("S5 implausible year of birth is rejected", s == 400, f"expected 400, got {s}")
+
+s, _ = req("POST", "/api/patients/", token=ADMIN, body={"initials": "TOOLONG"})
+check("S6 malformed initials are rejected", s == 400, f"expected 400, got {s}")
+
+# Enrol the same person in two trials — the container exists to answer
+# "everything on file for this person", which per-trial views cannot.
+s, _t1 = req("POST", "/api/trials/", token=ADMIN, body={
+    "name": "S-T1", "sponsor": "Sp", "drug": "D1", "indication": "Prostate"})
+s, _t2 = req("POST", "/api/trials/", token=ADMIN, body={
+    "name": "S-T2", "sponsor": "Sp", "drug": "D2", "indication": "Prostate"})
+req("POST", f"/api/trials/{_t1['id']}/patients", token=ADMIN,
+    body={"patient_uid": _UID, "patient_id": "S-001", "visit": "Baseline"})
+req("POST", f"/api/trials/{_t1['id']}/patients", token=ADMIN,
+    body={"patient_uid": _UID, "patient_id": "S-001", "visit": "Week 12"})
+req("POST", f"/api/trials/{_t2['id']}/patients", token=ADMIN,
+    body={"patient_uid": _UID, "patient_id": "X-77", "visit": "Baseline"})
+
+# A graded, signed slide must be counted as such. The container previously
+# read the grade from a nested "analysis" object that slide records do not
+# have, so it reported zero analysed and zero signed while the dashboard
+# correctly showed one of each — the same slide, two different numbers.
+_pats_raw = req("GET", f"/api/trials/{TID}/patients", token=ADMIN)[1]
+# Scope the comparison to ONE patient: the container is per-patient, while
+# the trial view spans every patient in the trial.
+_uid_here = next((p.get("patient_uid") for p in _pats_raw
+                  if p.get("patient_uid") and p.get("slides")), None)
+_mine = [p for p in _pats_raw if p.get("patient_uid") == _uid_here]
+_signed_here = sum(1 for p in _mine for sl in p.get("slides", []) if sl.get("confirmed"))
+_graded_here = sum(1 for p in _mine for sl in p.get("slides", []) if sl.get("grade_group") is not None)
+if _uid_here and (_signed_here or _graded_here):
+    s, _cc = req("GET", f"/api/patients/{_uid_here}/container", token=ADMIN)
+    check("S12 a signed graded slide is counted in the patient container",
+          s == 200 and _cc["totals"]["confirmed"] == _signed_here
+          and _cc["totals"]["analysed"] == _graded_here,
+          f"trial shows {_signed_here} signed/{_graded_here} graded, container shows {_cc.get('totals')}")
+
+s, _c = req("GET", f"/api/patients/{_UID}/container", token=ADMIN)
+check("S7 container spans every trial the patient is enrolled in",
+      s == 200 and _c["totals"]["trials"] == 2 and _c["totals"]["visits"] == 3,
+      f"got {s} {_c.get('totals')}")
+
+_codes = {e["trial_name"]: e["subject_code"] for e in _c.get("enrollments", [])}
+check("S8 each enrollment shows that trial's own subject code",
+      _codes.get("S-T1") == "S-001" and _codes.get("S-T2") == "X-77", f"got {_codes}")
+
+# Enrolling without a uid must register a patient rather than reject, so a
+# visit is never filed against a bare string again.
+s, _v = req("POST", f"/api/trials/{_t1['id']}/patients", token=ADMIN,
+            body={"visit": "Screening"})
+check("S9 a visit with no patient ID registers one instead of failing",
+      s == 200 and _v.get("patient_uid", "").startswith("OMN-"), f"got {s} {_v}")
+
+s, _ = req("GET", f"/api/patients/{_UID}/reports/../../../etc/passwd", token=ADMIN)
+check("S10 report retrieval refuses paths outside the patient container",
+      s in (404, 400), f"expected 404/400, got {s}")
+
+s, _ = req("GET", f"/api/patients/{_UID}/container")
+check("S11 patient container requires auth", s == 401, f"expected 401, got {s}")
+
+print("\n=== T. MODEL TRAINING (REAL, NOT SIMULATED) ===")
+
+# The single most important guard on this feature: no code path may report a
+# fabricated training curve again.
+import backend.training as _tr
+import backend.finetune as _ft
+_src = open(_tr.__file__).read()
+check("T1 training job contains no simulated optimisation loop",
+      "random." not in _src and "time.sleep" not in _src and "simulated" not in _src,
+      "training.py still contains simulation code")
+
+s, _model = req("GET", "/api/training/model", token=ADMIN)
+check("T2 the app reports which model it is grading with",
+      s == 200 and _model.get("source") in ("shipped", "finetuned"), f"got {s} {_model}")
+check("T3 model description is written for a non-specialist",
+      s == 200 and len(_model.get("description", "")) > 40, f"got {_model}")
+
+s, _rd = req("GET", "/api/training/readiness", token=ADMIN)
+check("T4 readiness reports real dataset counts",
+      s == 200 and "dataset" in _rd and "usable_examples" in _rd["dataset"], f"got {s}")
+
+# Under the minimum, starting must refuse with a reason rather than run.
+if _rd.get("dataset", {}).get("usable_examples", 0) < _rd.get("dataset", {}).get("minimum_required", 20):
+    s, _e = req("POST", "/api/training/start", token=ADMIN)
+    check("T5 training refuses to run without enough reviewed slides",
+          s in (400, 409) and "slide" in str(_e).lower(), f"got {s} {_e}")
+
+# QWK is the metric promotion is gated on, so it must be correct.
+check("T6 agreement metric is exact at its bounds",
+      _ft.quadratic_weighted_kappa([0,1,2,3,4,5],[0,1,2,3,4,5]) == 1.0
+      and _ft.quadratic_weighted_kappa([0,1,2,3,4,5],[5,4,3,2,1,0]) == -1.0,
+      "QWK bounds are wrong")
+check("T7 agreement metric is defined for degenerate input",
+      _ft.quadratic_weighted_kappa([], []) == 0.0
+      and _ft.quadratic_weighted_kappa([2,2],[2,2]) == 0.0,
+      "QWK crashes or misreports on degenerate input")
+
+# A fine-tune must never be promoted unless it beat the current model.
+check("T8 promotion is gated on measured improvement",
+      "improved = best[\"qwk\"] > base_qwk" in open(_ft.__file__).read(),
+      "promotion is no longer gated on a held-out comparison")
+
+# Corrections are training labels; free text cannot be one.
+from backend.trials import grade_group_from_text as _g
+check("T9 a correction resolves to exactly one grade group",
+      _g("4+3=7") == 3 and _g("3+4=7") == 2 and _g("benign") == 0,
+      "correction parsing is wrong")
+check("T10 an unresolvable correction is rejected, not guessed",
+      _g("banana") is None and _g("") is None and _g("4+9=13") is None,
+      "correction parsing accepts nonsense")
+
+s, _ = req("POST", "/api/trials/slides/correct", token=ADMIN,
+           body={"patient_id": PUUID, "slide_id": "nope", "correction": "banana", "password": "Admin12345!"})
+check("T11 the server refuses a free-text correction", s in (400, 404), f"got {s}")
+
+s, _ = req("POST", "/api/training/start")
+check("T12 starting training requires auth", s == 401, f"expected 401, got {s}")
+s, _ = req("POST", "/api/training/model/revert", token=MONITOR)
+check("T13 a monitor cannot change the active model", s == 403, f"expected 403, got {s}")
+
+print("\n=== U. BACKGROUND WORKERS & SELF-REPAIR ===")
+
+import backend.workers as _wk
+
+s, _w = req("GET", "/api/system/workers")
+check("U1 the app reports its own background-task health",
+      s == 200 and "workers" in _w and len(_w["workers"]) >= 4, f"got {s} {_w}")
+check("U2 every worker explains itself in plain language",
+      s == 200 and all(len(x["description"]) > 15 for x in _w.get("workers", [])),
+      "a worker has no human-readable description")
+check("U3 workers report health, not just activity",
+      s == 200 and all("healthy" in x and "last_error" in x for x in _w.get("workers", [])),
+      "worker status omits health")
+
+s, _r = req("POST", "/api/system/workers/partial-files/run")
+check("U4 a background check can be run on demand", s == 200 and "ok" in _r, f"got {s} {_r}")
+s, _ = req("POST", "/api/system/workers/does-not-exist/run")
+check("U5 an unknown background task is a clean 404", s == 404, f"got {s}")
+
+# The recovery worker runs on a schedule. If it did not exclude the run that
+# is live in this process, it would mark an in-progress training run as
+# interrupted partway through its first epoch.
+import backend.training as _tr2
+_src2 = open(_tr2.__file__).read()
+check("U6 run recovery cannot kill a training run that is actually live",
+      "live_id" in _src2 and 'r.get("id") != live_id' in _src2,
+      "reconcile_interrupted_runs no longer excludes the active run")
+
+# Failure isolation: a worker that throws must keep running and be reported
+# unhealthy, not take the process down or vanish.
+class _Boom(_wk.Worker):
+    name = "test-boom"; description = "deliberately failing test worker"; interval_s = 0.05
+    def tick(self): raise RuntimeError("boom")
+
+_sup = _wk.Supervisor(); _b = _Boom(); _sup.register(_b)
+_t = threading.Thread(target=_sup._loop, args=(_b,), daemon=True); _t.start()
+time.sleep(7); _sup._stop.set(); _t.join(timeout=3)
+check("U7 a failing worker keeps retrying instead of dying",
+      _b.status.runs >= 3, f"only ran {_b.status.runs} times")
+check("U8 a persistently failing worker is reported unhealthy",
+      _b.status.healthy is False and _sup.status()["unhealthy"] == ["test-boom"],
+      f"health not reported: {_b.status.as_dict()}")
+check("U9 the real error is preserved for diagnosis",
+      "RuntimeError" in (_b.status.last_error or ""), f"got {_b.status.last_error}")
+
+# A worker that recovers must clear its unhealthy state.
+class _Flaky(_wk.Worker):
+    name = "test-flaky"; description = "fails then recovers, for testing"; interval_s = 0.05
+    def __init__(self): super().__init__(); self.n = 0
+    def tick(self):
+        self.n += 1
+        if self.n <= 2: raise RuntimeError("transient")
+        return "recovered" if self.n == 3 else None
+
+_sup2 = _wk.Supervisor(); _f = _Flaky(); _sup2.register(_f)
+_t2 = threading.Thread(target=_sup2._loop, args=(_f,), daemon=True); _t2.start()
+time.sleep(8); _sup2._stop.set(); _t2.join(timeout=3)
+check("U10 a recovered worker stops being reported unhealthy",
+      _f.status.healthy and _f.status.consecutive_failures == 0 and _f.status.last_action == "recovered",
+      f"got {_f.status.as_dict()}")
+
+print("\n=== V. PRODUCT LANGUAGE ===")
+
+# The launch screen is the first thing a clinician sees. Host:port there reads
+# as a developer build, and means nothing to the person reading it.
+_conn = open(os.path.join(_ROOT, "app/dashboard/components/BackendConnection.tsx")).read()
+# Strip block comments before checking: the file documents the old wording in
+# order to explain why it was removed, and matching that is a false positive.
+_conn_code = re.sub(r"/\*.*?\*/", "", _conn, flags=re.S)
+check("V1 the start-up screen does not show a host and port",
+      "Starting server at" not in _conn_code and "backend\u2026" not in _conn_code,
+      "the launch screen still exposes the service address")
+check("V2 the service address is still reachable for support",
+      "Technical details" in _conn and "API_BASE" in _conn,
+      "technical detail was removed entirely instead of being tucked away")
+check("V3 the failure screen tells the user what to try",
+      "What to try" in _conn, "the error screen offers no next step")
+
+# A busy engine must not surface to a pathologist as a hard failure.
+_trial_page = open(os.path.join(_ROOT, "app/dashboard/trials/[id]/page.tsx")).read()
+check("V4 a saturated engine is retried rather than shown as an error",
+      "Retry-After" in _trial_page and "503" in _trial_page,
+      "the frontend still ignores the backend's retryable busy response")
 
 print("\n" + "=" * 60)
 print(f"PASSED: {len(PASSES)}   FAILED: {len(FAILS)}")

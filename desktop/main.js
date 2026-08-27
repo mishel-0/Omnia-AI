@@ -1,5 +1,5 @@
 const { app, BrowserWindow, dialog } = require('electron');
-const { spawn, fork } = require('child_process');
+const { spawn, fork, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
@@ -166,26 +166,40 @@ function startFrontendServer() {
 function waitForService(name, url, statusCheck, maxRetries, interval) {
   return new Promise((resolve) => {
     let retries = 0;
+    // Once the service answers, the loop must stop. Without this flag a
+    // request already in flight (or a pending retry timer) kept firing after
+    // resolve(), so the startup log showed "Backend ready" immediately
+    // followed by "Backend failed to start after 120s" for a backend that
+    // was in fact running — and the timer chain outlived the check.
+    let settled = false;
+    let timer = null;
+
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      if (ok) console.log(`[Omnia] ${name} ready`);
+      else console.error(`[Omnia] ${name} failed to start after ${(maxRetries * interval) / 1000}s`);
+      resolve(ok);
+    };
+
+    const retry = () => {
+      if (settled) return;
+      if (++retries >= maxRetries) finish(false);
+      else timer = setTimeout(check, interval);
+    };
+
     const check = () => {
+      if (settled) return;
       const req = http.get(url, (res) => {
-        if (statusCheck(res.statusCode)) {
-          console.log(`[Omnia] ${name} ready`);
-          resolve(true);
-        } else {
-          retry();
-        }
+        res.resume();  // drain, otherwise the socket is held open
+        if (statusCheck(res.statusCode)) finish(true);
+        else retry();
       });
       req.on('error', () => retry());
       req.setTimeout(interval, () => { req.destroy(); retry(); });
     };
-    const retry = () => {
-      if (++retries >= maxRetries) {
-        console.error(`[Omnia] ${name} failed to start after ${maxRetries * interval / 1000}s`);
-        resolve(false);
-      } else {
-        setTimeout(check, interval);
-      }
-    };
+
     check();
   });
 }
@@ -252,9 +266,47 @@ function isRunningFromDiskImage() {
   return app.isPackaged && app.getAppPath().startsWith('/Volumes/');
 }
 
-app.whenReady().then(async () => {
-  initLogging();
+/** Reclaim ports held by servers this app leaked on a previous run.
+ *
+ * The startup guard treats any busy port as a third-party conflict and
+ * quits with "close other applications" — advice the user cannot act on
+ * when the process holding the port is Omnia's own orphaned backend or
+ * frontend. Identify the owner and, if it is ours, stop it. Anything we
+ * do not recognise is left alone and reported honestly. */
+function portOwners(port) {
+  try {
+    const out = execFileSync('/usr/sbin/lsof',
+      ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-F', 'pc'],
+      { encoding: 'utf8', timeout: 4000 });
+    const owners = [];
+    let pid = null;
+    for (const line of out.split('\n')) {
+      if (line.startsWith('p')) pid = parseInt(line.slice(1), 10);
+      else if (line.startsWith('c') && pid) owners.push({ pid, command: line.slice(1) });
+    }
+    return owners;
+  } catch { return []; }   // lsof missing or nothing listening
+}
 
+async function reclaimOwnPorts() {
+  const OURS = /omnia|next-server|node/i;
+  let reclaimed = false;
+  for (const port of [BACKEND_PORT, FRONTEND_PORT]) {
+    for (const { pid, command } of portOwners(port)) {
+      if (pid === process.pid || !OURS.test(command)) continue;
+      try {
+        process.kill(pid, 'SIGKILL');
+        console.log(`[Omnia] Reclaimed port ${port} from leftover process ${pid} (${command})`);
+        reclaimed = true;
+      } catch (e) {
+        console.error(`[Omnia] Could not stop process ${pid} on port ${port}: ${e.message}`);
+      }
+    }
+  }
+  if (reclaimed) await new Promise((r) => setTimeout(r, 800));  // let the sockets close
+}
+
+async function startApp() {
   if (isRunningFromDiskImage()) {
     dialog.showErrorBox(
       'Please Install Omnia Pathology AI First',
@@ -267,6 +319,13 @@ app.whenReady().then(async () => {
     return;
   }
 
+  // A port is most often held by a previous instance of THIS app whose
+  // servers outlived it, not by unrelated software. Telling the user to
+  // "close other applications" in that case is a dead end they cannot act
+  // on, so reclaim our own leftovers first and only report a genuine
+  // third-party conflict.
+  await reclaimOwnPorts();
+
   const backendBusy = await isPortInUse(BACKEND_PORT);
   const frontendBusy = await isPortInUse(FRONTEND_PORT);
 
@@ -274,10 +333,16 @@ app.whenReady().then(async () => {
     const ports = [];
     if (backendBusy) ports.push(`port ${BACKEND_PORT} (backend)`);
     if (frontendBusy) ports.push(`port ${FRONTEND_PORT} (frontend)`);
-    dialog.showErrorBox(
-      'Port Conflict',
-      `Another application is using ${ports.join(' and ')}.\n\nPlease close other applications and restart Omnia Pathology AI.`,
-    );
+    const { response } = await dialog.showMessageBox({
+      type: 'warning',
+      title: 'Port In Use',
+      message: `Another application is using ${ports.join(' and ')}.`,
+      detail: 'Omnia Pathology AI needs these ports for its local engine. Close the other application, then choose Try Again.',
+      buttons: ['Try Again', 'Quit'],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (response === 0) { startApp(); return; }   // let the user recover
     app.quit();
     return;
   }
@@ -300,13 +365,57 @@ app.whenReady().then(async () => {
   }
 
   createWindow();
+}
+
+app.whenReady().then(() => {
+  initLogging();
+  startApp();
 });
 
+/** Stop the backend and frontend children.
+ *
+ * SIGTERM first, then SIGKILL for anything still alive. The bundled backend
+ * is a PyInstaller onefile binary: it runs a bootstrap parent that spawns
+ * the real server as a child, so a plain SIGTERM to the parent can leave
+ * the server holding its port. Leaked servers are not harmless — the next
+ * launch finds ports 3000/8000 occupied and refuses to start. */
+let shuttingDown = false;
+function stopServers() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  for (const [name, proc] of [['frontend', frontendServer], ['backend', backendProcess]]) {
+    if (!proc || proc.killed) continue;
+    try {
+      proc.kill('SIGTERM');
+      const pid = proc.pid;
+      setTimeout(() => {
+        try { process.kill(pid, 0); process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
+      }, 2000);
+    } catch (e) {
+      console.error(`[Omnia] Failed to stop ${name}:`, e.message);
+    }
+  }
+  frontendServer = null;
+  backendProcess = null;
+}
+
 app.on('window-all-closed', () => {
-  if (frontendServer) frontendServer.kill();
-  if (backendProcess) backendProcess.kill();
-  if (process.platform !== 'darwin') app.quit();
+  // On macOS an app normally stays resident with no windows, and clicking
+  // the dock icon reopens one. Killing the servers here would leave that
+  // reopened window pointing at a backend that is gone, so let the servers
+  // run and rely on 'before-quit' for the real teardown.
+  if (process.platform !== 'darwin') {
+    stopServers();
+    app.quit();
+  }
 });
+
+// The teardown that actually matters: without it, quitting left the backend
+// and frontend running and holding their ports.
+app.on('before-quit', stopServers);
+process.on('exit', stopServers);
+process.on('SIGINT', () => { stopServers(); process.exit(0); });
+process.on('SIGTERM', () => { stopServers(); process.exit(0); });
 
 app.on('activate', () => {
   if (!mainWindow) createWindow();

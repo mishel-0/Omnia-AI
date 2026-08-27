@@ -71,8 +71,8 @@ def generate_pathology_pdf(
     slide_filename: str = "",
     analysis_date: str = "",
     ai_grade: str = "",
-    ai_confidence: float = 0.0,
-    tumor_size_mm: float = 0.0,
+    ai_confidence: float = None,
+    tumor_size_mm: float = None,
     biomarkers: dict = None,
     treatment_response: str = "",
     prior_size_mm: float = 0.0,
@@ -167,7 +167,7 @@ def generate_pathology_pdf(
         grade_data = [
             [Paragraph(grade_label, s["result_label"])],
             [Paragraph(grade_text, s["result_grade"])],
-            [Paragraph(f"Confidence: {ai_confidence*100:.0f}%", s["small"])],
+            [Paragraph(f"Confidence: {ai_confidence*100:.0f}%" if ai_confidence is not None else "Confidence: —", s["small"])],
         ]
         t = Table(grade_data, colWidths=[170*mm])
         t.setStyle(TableStyle(result_style))
@@ -184,9 +184,9 @@ def generate_pathology_pdf(
         [Paragraph("Risk Category", s["value"]),
          Paragraph(risk_group or "—", s["value_bold"])],
         [Paragraph("AI Confidence", s["value"]),
-         Paragraph(f"{ai_confidence*100:.1f}%", s["value"])],
+         Paragraph(f"{ai_confidence*100:.1f}%" if ai_confidence is not None else "—", s["value"])],
         [Paragraph("Tumor Size", s["value"]),
-         Paragraph(f"{tumor_size_mm:.1f} mm" if tumor_size_mm else "—", s["value"])],
+         Paragraph(f"{tumor_size_mm:.1f} mm" if tumor_size_mm is not None else "—", s["value"])],
         [Paragraph("Doctor Review", s["value"]),
          Paragraph("Reviewed & Corrected" if doctor_correction else "Awaiting Review",
                     ParagraphStyle("ReviewStatus", parent=s["value"],
