@@ -90,6 +90,13 @@ def generate_pathology_pdf(
     suspicious_regions: int = None,
     processing_time_s: float = None,
     model_version: str = "",
+    # Review state must be passed in, not inferred. It was previously deduced
+    # from whether a correction existed, which made a slide the pathologist
+    # confirmed *unchanged* print as "Awaiting Review" on its own signed
+    # report — and a second table always printed "Reviewed" regardless.
+    confirmed: bool = False,
+    signed_by: str = "",
+    signed_at: str = "",
 ) -> bytes:
     """Generate a professional clinical trial pathology PDF report."""
     if biomarkers is None:
@@ -188,9 +195,10 @@ def generate_pathology_pdf(
         [Paragraph("Tumor Size", s["value"]),
          Paragraph(f"{tumor_size_mm:.1f} mm" if tumor_size_mm is not None else "—", s["value"])],
         [Paragraph("Doctor Review", s["value"]),
-         Paragraph("Reviewed & Corrected" if doctor_correction else "Awaiting Review",
+         Paragraph(("Reviewed & Corrected" if doctor_correction
+                    else "Reviewed & Approved") if confirmed else "Awaiting Review",
                     ParagraphStyle("ReviewStatus", parent=s["value"],
-                        textColor=DARK_GREEN if doctor_correction else GRAY))],
+                        textColor=DARK_GREEN if confirmed else GRAY))],
     ]
     t = Table(findings_data, colWidths=[40*mm, 130*mm])
     t.setStyle(TableStyle([
@@ -325,11 +333,14 @@ def generate_pathology_pdf(
         [Paragraph("AI Assessment", s["value"]),
          Paragraph(ai_grade or "Pending", s["value_bold"])],
         [Paragraph("Doctor Correction", s["value"]),
-         Paragraph(doctor_correction or "None (confirmed)", s["value"])],
+         Paragraph(doctor_correction or ("None — AI grade accepted" if confirmed
+                                         else "Not yet reviewed"), s["value"])],
         [Paragraph("Review Status", s["value"]),
-         Paragraph("✓ Reviewed" if doctor_correction or True else "⏳ Pending",
+         # `or True` here made this branch unreachable, so an unreviewed slide
+         # printed "Reviewed" — a false attestation in a regulatory document.
+         Paragraph("✓ Reviewed" if confirmed else "⏳ Awaiting pathologist review",
                     ParagraphStyle("ReviewStatusValue",
-                        textColor=DARK_GREEN if doctor_correction else GRAY,
+                        textColor=DARK_GREEN if confirmed else GRAY,
                         fontName="Helvetica-Bold", fontSize=10))],
     ]
     if notes:

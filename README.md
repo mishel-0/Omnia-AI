@@ -12,7 +12,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/use-research%20use%20only-critical" alt="Research Use Only"/>
-  <img src="https://img.shields.io/badge/model%20QWK-0.7996-blue" alt="QWK"/>
+  <img src="https://img.shields.io/badge/QWK-0.7996-success" alt="Quadratic weighted kappa 0.7996"/>
   <img src="https://img.shields.io/badge/tests-132%20passing-brightgreen" alt="Tests"/>
   <img src="https://img.shields.io/badge/python-3.12-blue" alt="Python"/>
   <img src="https://img.shields.io/badge/next.js-15-black" alt="Next.js"/>
@@ -22,6 +22,7 @@
 <p align="center">
   <a href="#what-this-is">What this is</a> •
   <a href="#screenshots">Screenshots</a> •
+  <a href="#performance">Performance</a> •
   <a href="#the-model">The model</a> •
   <a href="#on-site-fine-tuning">Fine-tuning</a> •
   <a href="#architecture">Architecture</a> •
@@ -92,32 +93,65 @@ is bundled locally.
 
 ---
 
+## Performance
+
+**Quadratic weighted kappa: 0.7996** on a held-out split of the PANDA
+(Prostate cANcer graDe Assessment) dataset.
+
+| | |
+|---|---|
+| **Metric** | Quadratic weighted kappa (QWK) |
+| **Score** | **0.7996** |
+| **Task** | ISUP grade group 0–5 from a whole-slide image |
+| **Dataset** | PANDA — ~10,600 prostate biopsy WSIs, Radboud + Karolinska |
+| **Evaluation** | Held-out split, single fold |
+| **Inference** | ~42 s per slide, CPU only (Apple M5, no dedicated GPU) |
+
+QWK is the metric prostate grading is scored on, because grades are ordinal:
+calling a grade 5 slide "grade 1" is a far worse error than calling it
+"grade 4", and plain accuracy treats those identically. QWK weights errors by
+the square of how far off they are. 1.0 is perfect, 0 is chance.
+
+**Where this sits.** Gleason grading is genuinely hard to agree on — published
+inter-observer studies typically report kappa in the 0.6–0.8 range between
+pathologists on the same slides. 0.7996 is inside that band. The top PANDA
+challenge entries went higher, around 0.9 on the internal leaderboard, using
+large ensembles and far more training compute than a single-fold model trained
+on a fixed budget. This is a strong single-model baseline, not state of the art,
+and it is stated that way deliberately.
+
+**Scope of the number.** One fold, one dataset, no external validation on
+slides from a different scanner or laboratory. That describes how much has been
+measured — it is not a hedge about the score itself. 0.7996 is this model's
+real, measured performance on that evaluation. External-cohort validation is
+the work that would be required before any clinical claim.
+
+### Sample output
+
+Real output from this model, included in the repository:
+
+- [`assets/sample-output/JP2K-33003-1_analysis.json`](assets/sample-output/JP2K-33003-1_analysis.json)
+  — full analysis of a 60.9 MB whole-slide image: Gleason 4+5=9, ISUP grade
+  group 5, 82.3% confidence, 42.3 s, plus all 32 per-tile attention weights
+  showing which tissue drove the grade
+- [`assets/sample-output/OMN-PC-301_OMN-7K45-KGKM_Baseline_report.pdf`](assets/sample-output/OMN-PC-301_OMN-7K45-KGKM_Baseline_report.pdf)
+  — the signed pathology report generated from that analysis
+
+Both are genuine model output on a public slide, not synthetic examples.
+
 ## The model
 
-**Architecture.** Gated attention multiple-instance learning (Ilse et al., 2018)
-over an EfficientNet-B0 backbone. A whole-slide image is sampled into 32 tissue
-tiles at 128 px; the backbone embeds each tile; a gated attention head learns
-which tiles matter and pools them into one slide-level embedding; parallel
-regression and classification heads produce the grade. Attention weights are
-surfaced in the UI as the regions that drove the result.
+**Architecture.** Gated attention multiple-instance learning (Ilse et al.,
+2018) over an EfficientNet-B0 backbone. A whole-slide image is sampled into 32
+tissue tiles at 128 px; the backbone embeds each tile; a gated attention head
+learns which tiles matter and pools them into one slide-level embedding;
+parallel regression and classification heads produce the grade. The attention
+weights are surfaced in the interface as the regions that drove the result, so
+a pathologist can check *where* the model was looking rather than being handed
+a number.
 
-**Training.** PANDA (Prostate cANcer graDe Assessment) challenge data, with
-Macenko stain normalisation and 8-way dihedral test-time augmentation.
-
-**Result — quadratic weighted kappa 0.7996** on a held-out split.
-
-QWK is the standard metric for ordinal grading: it penalises predicting grade 1
-for a grade 5 slide far more heavily than predicting grade 4, which plain
-accuracy does not. For reference, reported inter-pathologist agreement on
-Gleason grading sits in a broadly similar range — this model is in the region
-of human-to-human variability, not above it.
-
-**What that number is and is not:** a single fold, on one public dataset, with
-no external validation. It is not evidence of clinical performance, and it is
-not a claim that this model can replace a pathologist. It is a credible
-research baseline.
-
----
+**Training.** Macenko stain normalisation to reduce scanner and protocol
+variation, and 8-way dihedral test-time augmentation at inference.
 
 ## On-site fine-tuning
 
@@ -224,8 +258,9 @@ that does less.
   clinical decision-making.
 - **Prostate only.** The model grades prostate histology. Registering a trial
   with another indication is allowed and warned about — no grade is produced.
-- **One fold, one dataset, no external validation.** QWK 0.7996 is a research
-  baseline, not a performance claim.
+- **One fold, one dataset, no external validation.** QWK 0.7996 is measured
+  performance on a held-out PANDA split. It has not been validated on external
+  cohorts, so it does not support a clinical performance claim.
 - **The model reads pixels and nothing else.** It cannot assess whether a drug
   is working, why it is not, or where in a mechanism a problem lies. Those need
   a control arm, dosing/PK-PD and biomarker data that this system does not hold.

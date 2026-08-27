@@ -1,0 +1,266 @@
+{
+  "_about": "Genuine output from the bundled grading model on a publicly available prostate biopsy whole-slide image. Not a synthetic example.",
+  "slide": {
+    "filename": "JP2K-33003-1.svs",
+    "file_size_bytes": 63847265,
+    "file_size_human": "60.9 MB"
+  },
+  "model": {
+    "version": "Omnia-Prostate-attnMIL-fold0-v1 (QWK 0.7996, single-fold, not externally validated)",
+    "architecture": "Gated attention MIL (Ilse et al. 2018) over EfficientNet-B0",
+    "tiles_sampled": 32,
+    "tile_size_px": 128,
+    "test_time_augmentation": "8-way dihedral",
+    "stain_normalisation": "Macenko"
+  },
+  "result": {
+    "gleason": "4+5=9",
+    "isup_grade_group": 5,
+    "risk_group": "Very High",
+    "confidence": 0.823,
+    "processing_time_s": 42.3
+  },
+  "not_assessed": {
+    "_why": "The model is a slide-level grade classifier. These fields need measurements or stains it does not produce, and are reported as unassessed rather than filled with plausible values.",
+    "tumour_size_mm": null,
+    "tumour_involvement_pct": null,
+    "perineural_invasion": null,
+    "lymphovascular_invasion": null,
+    "cribriform_pattern": null,
+    "biomarkers": {}
+  },
+  "attention": {
+    "_about": "Per-tile attention weights from the pooling layer \u2014 which tissue drove the grade. 'attention' is normalised 0-1 across this slide's own tiles; 'attention_raw' is the raw softmax weight.",
+    "regions": [
+      {
+        "x": 10202,
+        "y": 12002,
+        "size": 128,
+        "attention": 1.0,
+        "attention_raw": 0.56877
+      },
+      {
+        "x": 9242,
+        "y": 12482,
+        "size": 128,
+        "attention": 0.2217,
+        "attention_raw": 0.126645
+      },
+      {
+        "x": 8761,
+        "y": 3000,
+        "size": 128,
+        "attention": 0.1501,
+        "attention_raw": 0.085995
+      },
+      {
+        "x": 12362,
+        "y": 5161,
+        "size": 128,
+        "attention": 0.127,
+        "attention_raw": 0.072862
+      },
+      {
+        "x": 9362,
+        "y": 12122,
+        "size": 128,
+        "attention": 0.0609,
+        "attention_raw": 0.03528
+      },
+      {
+        "x": 8761,
+        "y": 12242,
+        "size": 128,
+        "attention": 0.0607,
+        "attention_raw": 0.035167
+      },
+      {
+        "x": 9482,
+        "y": 12242,
+        "size": 128,
+        "attention": 0.0162,
+        "attention_raw": 0.009902
+      },
+      {
+        "x": 7321,
+        "y": 12482,
+        "size": 128,
+        "attention": 0.013,
+        "attention_raw": 0.008107
+      },
+      {
+        "x": 8881,
+        "y": 12602,
+        "size": 128,
+        "attention": 0.0118,
+        "attention_raw": 0.007405
+      },
+      {
+        "x": 7681,
+        "y": 12602,
+        "size": 128,
+        "attention": 0.0111,
+        "attention_raw": 0.007025
+      },
+      {
+        "x": 10562,
+        "y": 11762,
+        "size": 128,
+        "attention": 0.0074,
+        "attention_raw": 0.004932
+      },
+      {
+        "x": 8641,
+        "y": 2880,
+        "size": 128,
+        "attention": 0.0066,
+        "attention_raw": 0.004441
+      },
+      {
+        "x": 7201,
+        "y": 12482,
+        "size": 128,
+        "attention": 0.0059,
+        "attention_raw": 0.004047
+      },
+      {
+        "x": 10802,
+        "y": 3120,
+        "size": 128,
+        "attention": 0.0054,
+        "attention_raw": 0.00378
+      },
+      {
+        "x": 8641,
+        "y": 3120,
+        "size": 128,
+        "attention": 0.0046,
+        "attention_raw": 0.003324
+      },
+      {
+        "x": 9602,
+        "y": 12362,
+        "size": 128,
+        "attention": 0.0044,
+        "attention_raw": 0.003182
+      },
+      {
+        "x": 8281,
+        "y": 3000,
+        "size": 128,
+        "attention": 0.0034,
+        "attention_raw": 0.002617
+      },
+      {
+        "x": 9242,
+        "y": 3000,
+        "size": 128,
+        "attention": 0.0023,
+        "attention_raw": 0.001999
+      },
+      {
+        "x": 10922,
+        "y": 3000,
+        "size": 128,
+        "attention": 0.0015,
+        "attention_raw": 0.001577
+      },
+      {
+        "x": 7561,
+        "y": 3120,
+        "size": 128,
+        "attention": 0.0013,
+        "attention_raw": 0.001425
+      },
+      {
+        "x": 9122,
+        "y": 12242,
+        "size": 128,
+        "attention": 0.0011,
+        "attention_raw": 0.001328
+      },
+      {
+        "x": 11162,
+        "y": 3120,
+        "size": 128,
+        "attention": 0.001,
+        "attention_raw": 0.001287
+      },
+      {
+        "x": 9722,
+        "y": 3000,
+        "size": 128,
+        "attention": 0.0006,
+        "attention_raw": 0.001018
+      },
+      {
+        "x": 9722,
+        "y": 3240,
+        "size": 128,
+        "attention": 0.0006,
+        "attention_raw": 0.001047
+      },
+      {
+        "x": 9962,
+        "y": 12002,
+        "size": 128,
+        "attention": 0.0006,
+        "attention_raw": 0.00105
+      },
+      {
+        "x": 7681,
+        "y": 12722,
+        "size": 128,
+        "attention": 0.0005,
+        "attention_raw": 0.000963
+      },
+      {
+        "x": 7201,
+        "y": 3240,
+        "size": 128,
+        "attention": 0.0003,
+        "attention_raw": 0.000886
+      },
+      {
+        "x": 7681,
+        "y": 3120,
+        "size": 128,
+        "attention": 0.0003,
+        "attention_raw": 0.000873
+      },
+      {
+        "x": 9962,
+        "y": 3240,
+        "size": 128,
+        "attention": 0.0002,
+        "attention_raw": 0.000796
+      },
+      {
+        "x": 10202,
+        "y": 2760,
+        "size": 128,
+        "attention": 0.0002,
+        "attention_raw": 0.00084
+      },
+      {
+        "x": 9482,
+        "y": 3000,
+        "size": 128,
+        "attention": 0.0,
+        "attention_raw": 0.000724
+      },
+      {
+        "x": 10922,
+        "y": 3120,
+        "size": 128,
+        "attention": 0.0,
+        "attention_raw": 0.000705
+      }
+    ]
+  },
+  "review": {
+    "confirmed": true,
+    "doctor_correction": null,
+    "analysis_source": "ai"
+  }
+}

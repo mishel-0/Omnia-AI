@@ -15,6 +15,35 @@ smoke-test and publish the macOS and Windows installers.
 
 ---
 
+## [1.2.2] — 2026-08-27
+
+### Added
+
+- **Sample model output in the repository** — the full analysis of a 60.9 MB
+  whole-slide image (Gleason 4+5=9, ISUP grade group 5, 82.3% confidence, 32
+  per-tile attention weights) and the signed pathology report generated from
+  it. Genuine model output, not synthetic examples.
+
+### Changed
+
+- The README presents QWK 0.7996 as what it is: **measured performance**, with
+  the evaluation setup, what the metric means, and where it sits relative to
+  inter-pathologist agreement and the PANDA leaderboard. The previous wording
+  ("not a performance claim") was simply wrong — QWK *is* a performance
+  measurement. The accurate statement is that it has not been externally
+  validated, which is a statement about scope, not about the score.
+
+### Fixed
+
+- **A signed pathology report could contradict itself.** Review state was
+  inferred from whether a correction existed, so a slide the pathologist
+  confirmed *unchanged* printed "Awaiting Review" in one table and
+  "✓ Reviewed" in another, in the same document.
+- **An unreviewed slide's report claimed it had been reviewed.** The status
+  read `"✓ Reviewed" if doctor_correction or True else "⏳ Pending"` — the
+  `or True` made the alternative unreachable, so the document asserted a review
+  that had not happened. Review state is now passed in explicitly.
+
 ## [1.2.1] — 2026-08-27
 
 ### Fixed
@@ -128,6 +157,7 @@ smoke-test and publish the macOS and Windows installers.
 - Desktop packaging: Electron shell with a PyInstaller-bundled backend.
 - Audit trail, electronic signatures and role-based access.
 
+[1.2.2]: https://github.com/mishel-0/Omnia-AI/releases/tag/v1.2.2
 [1.2.1]: https://github.com/mishel-0/Omnia-AI/releases/tag/v1.2.1
 [1.2.0]: https://github.com/mishel-0/Omnia-AI/releases/tag/v1.2.0
 [1.1.3]: https://github.com/mishel-0/Omnia-AI/releases/tag/v1.1.3

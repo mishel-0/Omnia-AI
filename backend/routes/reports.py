@@ -43,6 +43,11 @@ class PatientReportRequest(BaseModel):
     # the issued document can be retrieved later. A report that exists only in
     # the browser's downloads folder is not a record.
     patient_uid: str = ""
+    # Review state, so the report states what actually happened rather than
+    # guessing from whether a correction was entered.
+    confirmed: bool = False
+    signed_by: str = ""
+    signed_at: str = ""
 
 @router.post("/patient")
 def generate_patient_report(req: PatientReportRequest):
@@ -75,6 +80,9 @@ def generate_patient_report(req: PatientReportRequest):
             suspicious_regions=req.suspicious_regions,
             processing_time_s=req.processing_time_s,
             model_version=req.model_version,
+            confirmed=req.confirmed,
+            signed_by=req.signed_by,
+            signed_at=req.signed_at,
         )
         if req.patient_uid:
             # Filing must not cost the caller their report: if the container

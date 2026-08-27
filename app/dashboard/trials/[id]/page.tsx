@@ -636,6 +636,12 @@ export default function TrialDetail() {
           ai_confidence: slide.confidence ?? null,
           tumor_size_mm: slide.size_mm ?? null,
           doctor_correction: slide.doctor_correction || null,
+          // Sent explicitly so the PDF reports the real review state. It used
+          // to be inferred from whether a correction existed, so a slide
+          // confirmed unchanged printed as "Awaiting Review".
+          confirmed: !!slide.confirmed,
+          signed_by: slide.signed_by || '',
+          signed_at: slide.signed_at || '',
           grade_group: slide.grade_group ?? null,
           risk_group: slide.risk_group || '',
           tumor_involvement_pct: slide.tumor_involvement_pct ?? null,
