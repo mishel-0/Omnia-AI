@@ -15,6 +15,21 @@ smoke-test and publish the macOS and Windows installers.
 
 ---
 
+## [1.2.1] — 2026-08-27
+
+### Fixed
+
+- **The Windows installer shipped without a backend.** `extraResources`
+  pointed at `dist/omnia-backend` on every platform; PyInstaller emits
+  `omnia-backend.exe` on Windows, so the entry matched nothing. electron-builder
+  only warns for a missing source and continues, so the installer built
+  successfully and contained no backend — it would have installed and failed on
+  launch. The backend now has per-platform entries and `desktop/main.js`
+  resolves the matching filename at runtime.
+- electron-builder no longer auto-publishes on seeing a git tag, which failed
+  the build for a missing `GH_TOKEN`. Release assets are attached explicitly by
+  the workflow.
+
 ## [1.2.0] — 2026-08-27
 
 ### Added
@@ -113,5 +128,6 @@ smoke-test and publish the macOS and Windows installers.
 - Desktop packaging: Electron shell with a PyInstaller-bundled backend.
 - Audit trail, electronic signatures and role-based access.
 
+[1.2.1]: https://github.com/mishel-0/Omnia-AI/releases/tag/v1.2.1
 [1.2.0]: https://github.com/mishel-0/Omnia-AI/releases/tag/v1.2.0
 [1.1.3]: https://github.com/mishel-0/Omnia-AI/releases/tag/v1.1.3
