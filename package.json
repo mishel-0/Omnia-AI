@@ -38,10 +38,6 @@
       {
         "from": ".next/standalone",
         "to": "frontend"
-      },
-      {
-        "from": "dist/omnia-backend",
-        "to": "backend"
       }
     ],
     "mac": {
@@ -51,13 +47,25 @@
       ],
       "icon": "desktop/icon.icns",
       "category": "public.app-category.medical",
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "extraResources": [
+        {
+          "from": "dist/omnia-backend",
+          "to": "backend"
+        }
+      ]
     },
     "win": {
       "target": [
         "nsis"
       ],
-      "icon": "desktop/icon.ico"
+      "icon": "desktop/icon.ico",
+      "extraResources": [
+        {
+          "from": "dist/omnia-backend.exe",
+          "to": "backend.exe"
+        }
+      ]
     },
     "dmg": {
       "icon": "desktop/icon.icns",

@@ -79,7 +79,12 @@ function isPortInUse(port) {
 // ── Path resolution ─────────────────────────────────────────────────────
 function getBackendPath() {
   if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'backend');
+    // PyInstaller emits `omnia-backend` on macOS and `omnia-backend.exe` on
+    // Windows, and electron-builder copies each under a matching name. Asking
+    // for the extensionless name on Windows found nothing, so the app reported
+    // "Backend component not found" on every launch.
+    const name = process.platform === 'win32' ? 'backend.exe' : 'backend';
+    return path.join(process.resourcesPath, name);
   }
   return path.join(__dirname, '..', 'backend', 'main.py');
 }

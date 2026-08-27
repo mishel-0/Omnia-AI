@@ -139,11 +139,11 @@ echo ""
 echo "[4/4] Packaging Electron app..."
 
 if [ "$PLATFORM" = "mac" ]; then
-    run_step electron-builder-mac npx electron-builder --mac --config.extraMetadata.main=desktop/main.js
+    run_step electron-builder-mac npx electron-builder --mac --publish never --config.extraMetadata.main=desktop/main.js
 elif [ "$PLATFORM" = "win" ]; then
-    run_step electron-builder-win npx electron-builder --win --config.extraMetadata.main=desktop/main.js
+    run_step electron-builder-win npx electron-builder --win --publish never --config.extraMetadata.main=desktop/main.js
 elif [ "$PLATFORM" = "all" ]; then
-    run_step electron-builder-all npx electron-builder --mac --win --config.extraMetadata.main=desktop/main.js
+    run_step electron-builder-all npx electron-builder --mac --win --publish never --config.extraMetadata.main=desktop/main.js
 fi
 
 # Keep the build output out of Spotlight. Without this, the freshly built
