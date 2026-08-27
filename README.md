@@ -59,6 +59,13 @@ is bundled locally.
 ## Screenshots
 
 <p align="center">
+  <img src="assets/screenshots/07-ai-analysis.png" alt="AI analysis of a whole-slide image with the attention overlay showing which tissue drove the grade" width="100%"/>
+  <br/><sub><b>AI analysis with attention overlay</b> — the model's grade on a real 60.9 MB whole-slide image,
+  with the 32 sampled regions shaded by how much each drove the result. Fields the model does not produce
+  are shown as "Not assessed" rather than filled in.</sub>
+</p>
+
+<p align="center">
   <img src="assets/screenshots/01-dashboard.png" alt="Trial dashboard showing review progress, outstanding work and portfolio totals" width="100%"/>
   <br/><sub><b>Trial dashboard</b> — what is done, what needs a pathologist, and the trial portfolio</sub>
 </p>
@@ -137,7 +144,8 @@ Real output from this model, included in the repository:
 - [`assets/sample-output/OMN-PC-301_OMN-7K45-KGKM_Baseline_report.pdf`](assets/sample-output/OMN-PC-301_OMN-7K45-KGKM_Baseline_report.pdf)
   — the signed pathology report generated from that analysis
 
-Both are genuine model output on a public slide, not synthetic examples.
+Both are genuine model output on a public slide, not synthetic examples — the
+attention overlay at the top of this README is the same analysis, rendered.
 
 ## The model
 

@@ -34,6 +34,11 @@ const SHOTS = [
     label: 'On-site model fine-tuning' },
   { file: '06-audit-trail.png',      path: '/dashboard/audit',
     label: 'Audit trail' },
+  // The attention overlay is the most informative view in the product: it
+  // shows which tissue the model actually weighted, on the real slide.
+  { file: '07-ai-analysis.png',      path: null, // trial detail, AI panel open
+    label: 'AI analysis with attention overlay',
+    expand: ['AI Report'], clip: 'analysis' },
 ];
 
 if (!TOKEN) {
@@ -74,6 +79,7 @@ try {
   for (const shot of SHOTS) {
     let path = shot.path;
     if (shot.file.startsWith('02') && ids.trial) path = `/dashboard/trials/${ids.trial}`;
+    if (shot.file.startsWith('07') && ids.trial) path = `/dashboard/trials/${ids.trial}`;
     if (shot.file.startsWith('04') && ids.patient) path = `/dashboard/patients/${ids.patient}`;
     if (!path) { console.log(`  skip ${shot.file} (nothing to show)`); continue; }
 
@@ -125,6 +131,25 @@ try {
     await page.setViewport({ ...VIEWPORT, height });
     await new Promise((r) => setTimeout(r, 400));
 
+    if (shot.clip === 'analysis') {
+      // Capture the expanded analysis panel on its own. A full-page frame
+      // would bury the attention overlay under trial chrome.
+      const box = await page.evaluate(() => {
+        const el = [...document.querySelectorAll('div')]
+          .find(d => d.textContent?.includes('SLIDE VIEWER')
+                     && d.querySelector('img, canvas')
+                     && d.getBoundingClientRect().height > 400);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { x: r.x, y: r.y + window.scrollY, width: r.width, height: r.height };
+      });
+      if (box) {
+        await page.screenshot({ path: `${OUT}/${shot.file}`, clip: box });
+        await page.setViewport(VIEWPORT);
+        console.log(`  ✓ ${shot.file}  — ${shot.label}`);
+        continue;
+      }
+    }
     await page.screenshot({ path: `${OUT}/${shot.file}` });
     await page.setViewport(VIEWPORT);
     console.log(`  ✓ ${shot.file}  — ${shot.label}`);
