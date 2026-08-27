@@ -83,7 +83,7 @@ export default function AuditPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
-        <div className="border-b border-[var(--border-subtle)] px-6 py-3.5 flex items-center justify-between bg-[var(--bg-card-solid)]">
+        <div className="titlebar-inset border-b border-[var(--border-subtle)] pr-6 py-3.5 flex items-center justify-between bg-[var(--bg-card-solid)]">
           <div className="space-y-1.5">
             <div className="w-32 h-3.5 rounded-[4px] skeleton-shimmer" />
             <div className="w-64 h-2.5 rounded-[4px] skeleton-shimmer" />
@@ -100,7 +100,7 @@ export default function AuditPage() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
-      <div className="border-b border-[var(--border-subtle)] px-6 py-3.5 flex items-center justify-between bg-[var(--bg-card-solid)]">
+      <div className="titlebar-inset border-b border-[var(--border-subtle)] pr-6 py-3.5 flex items-center justify-between bg-[var(--bg-card-solid)]">
         <div className="flex items-center gap-3">
           <button onClick={() => router.push('/dashboard')} className="p-1.5 rounded-[8px] hover:bg-[var(--skeleton-bg)]">
             <ArrowLeft className="w-4 h-4" />
@@ -133,7 +133,8 @@ export default function AuditPage() {
           <EmptyState icon={ScrollText} title="No events recorded yet" />
         ) : (
           <Card size="sm" className="overflow-hidden">
-            <table className="w-full text-left border-collapse">
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full text-left border-collapse min-w-[640px]">
               <thead>
                 <tr className="border-b border-[var(--border-subtle)] bg-[var(--skeleton-bg)]">
                   <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Timestamp</th>
@@ -157,6 +158,7 @@ export default function AuditPage() {
                 ))}
               </tbody>
             </table>
+              </div>
           </Card>
         )}
       </div>

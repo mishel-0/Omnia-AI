@@ -11,8 +11,15 @@ import { apiFetch, apiSend, useAuth, canWrite } from '@/lib/auth';
 import { useToast } from '@/lib/toast';
 import { useDialogs } from '@/lib/dialogs';
 import { InfoHint, TrustDisclosure } from '@/lib/onboarding';
+import { SubjectTimeline } from './SubjectTimeline';
+import { CohortInsights } from './CohortInsights';
+import { DrugProfile } from './DrugProfile';
 
 interface Biomarker { result: string; interpretation: string; }
+/** One sampled tile and how strongly the model's attention layer weighted it
+ * when grading the slide. `attention` is normalised 0-1 across this slide's
+ * own tiles; `attention_raw` is the underlying softmax weight. */
+interface AttentionRegion { x: number; y: number; size: number; attention: number; attention_raw: number; }
 interface SlideQuality { tissue_quality: string; staining_quality: string; artifacts_detected: string; }
 interface Slide {
   id: string;
@@ -35,6 +42,10 @@ interface Slide {
   processing_time_s?: number;
   model_version?: string;
   analysis_source?: 'mock' | 'ai' | null;
+  model_error?: string;
+  attention_regions?: AttentionRegion[];
+  slide_width?: number;
+  slide_height?: number;
   confirmed: boolean;
   doctor_correction?: string;
   signed_by?: string;
@@ -58,6 +69,7 @@ interface Patient {
   slides: Slide[];
   notes: string;
   site?: string;
+  created?: string;
 }
 
 interface Trial {
@@ -92,24 +104,6 @@ type ESignAction =
   | { mode: 'confirm'; patientId: string; slideId: string }
   | { mode: 'correct'; patientId: string; slideId: string; correction: string };
 
-function hashString(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash) || 1;
-}
-
-/** Deterministic PRNG (Park-Miller) so the same slide always renders the same mock heatmap. */
-function seededRandom(seed: number) {
-  let s = seed % 2147483647;
-  if (s <= 0) s += 2147483646;
-  return () => {
-    s = (s * 16807) % 2147483647;
-    return (s - 1) / 2147483646;
-  };
-}
 
 /** Human-readable file size — real slides are GB, but small files must not read "0.0 MB". */
 function formatBytes(bytes: number): string {
@@ -164,52 +158,174 @@ function heatColor(heat: number): string {
   return '#FF3B30';
 }
 
-/** Illustrative mock heatmap over a synthetic H&E-toned viewport — not the real uploaded image.
- * Deterministic per slide so it looks stable, not randomly regenerated on every render. */
-function SlideHeatmapPreview({ slide }: { slide: Slide }) {
-  const rand = seededRandom(hashString(slide.id));
-  const gradeGroup = slide.grade_group || 1;
-  const regionCount = Math.min(slide.suspicious_regions || 8, 22);
+/** Real slide viewer: renders the actual uploaded whole-slide image and
+ * overlays the model's genuine per-tile attention weights at the slide
+ * coordinates they were computed from.
+ *
+ * The attention values come from the MIL pooling layer — they are the
+ * weights the model actually used to decide this slide's grade, so a hot
+ * region is literally "this tile drove the prediction". That is a real
+ * explainability signal, NOT a tumor-probability map: the model was never
+ * trained on per-pixel tumor annotations, only slide-level grades. The
+ * label wording below reflects that distinction deliberately. */
+function SlideHeatmapPreview({ slide, patientId }: { slide: Slide; patientId: string }) {
+  const [imgUrl, setImgUrl] = React.useState<string | null>(null);
+  const [imgError, setImgError] = React.useState<string | null>(null);
+  const [showHeat, setShowHeat] = React.useState(true);
+  const [zoom, setZoom] = React.useState(1);
+  const [hovered, setHovered] = React.useState<number | null>(null);
 
-  const blobs = Array.from({ length: 6 }).map(() => ({
-    x: 10 + rand() * 80,
-    y: 8 + rand() * 60,
-    r: 6 + rand() * 10,
-  }));
-  const regions = Array.from({ length: regionCount }).map(() => ({
-    x: 8 + rand() * 84,
-    y: 8 + rand() * 60,
-    r: 2.5 + rand() * 4,
-    heat: Math.min(1, (gradeGroup / 5) * 0.55 + rand() * 0.5),
-  }));
+  const regions = slide.attention_regions || [];
+  const sw = slide.slide_width || 0;
+  const sh = slide.slide_height || 0;
+
+  React.useEffect(() => {
+    let revoked: string | null = null;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiFetch(`/api/trials/patients/${patientId}/slides/${slide.id}/thumbnail`);
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.detail || `Could not load slide image (${res.status})`);
+        }
+        const blob = await res.blob();
+        if (cancelled) return;
+        const url = URL.createObjectURL(blob);
+        revoked = url;
+        setImgUrl(url);
+      } catch (e) {
+        if (!cancelled) setImgError(e instanceof Error ? e.message : 'Could not load slide image');
+      }
+    })();
+    // Blob URLs leak until explicitly revoked — release on unmount.
+    return () => { cancelled = true; if (revoked) URL.revokeObjectURL(revoked); };
+  }, [patientId, slide.id]);
+
+  const canOverlay = regions.length > 0 && sw > 0 && sh > 0;
 
   return (
     <div className="mb-5">
       <div className="flex items-center gap-2 mb-2 flex-wrap">
-        <p className="text-[9px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Slide Preview</p>
-        <span className="text-[9px] text-[var(--text-secondary)]/60">Simulated heatmap — illustrative only, not the uploaded image</span>
+        <p className="text-[9px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Slide Viewer</p>
+        {canOverlay ? (
+          <span className="text-[9px] text-[var(--text-secondary)]/70">
+            Actual slide · {regions.length} analysed regions, shaded by how much each drove the model&rsquo;s grade
+          </span>
+        ) : (
+          <span className="text-[9px] text-[var(--text-secondary)]/70">Actual uploaded slide</span>
+        )}
+        <div className="ml-auto flex items-center gap-1.5">
+          {canOverlay && (
+            <button
+              onClick={() => setShowHeat((v) => !v)}
+              className="px-2 py-0.5 rounded-[6px] text-[10px] font-medium border border-[var(--border-subtle)] hover:bg-[var(--border-medium)] transition-colors"
+            >
+              {showHeat ? 'Hide attention' : 'Show attention'}
+            </button>
+          )}
+          <button
+            onClick={() => setZoom((z) => Math.max(1, +(z - 0.5).toFixed(1)))}
+            disabled={zoom <= 1}
+            className="px-2 py-0.5 rounded-[6px] text-[10px] font-medium border border-[var(--border-subtle)] hover:bg-[var(--border-medium)] transition-colors disabled:opacity-40"
+            aria-label="Zoom out"
+          >
+            −
+          </button>
+          <span className="text-[10px] tabular-nums text-[var(--text-secondary)] w-8 text-center">{zoom.toFixed(1)}×</span>
+          <button
+            onClick={() => setZoom((z) => Math.min(6, +(z + 0.5).toFixed(1)))}
+            disabled={zoom >= 6}
+            className="px-2 py-0.5 rounded-[6px] text-[10px] font-medium border border-[var(--border-subtle)] hover:bg-[var(--border-medium)] transition-colors disabled:opacity-40"
+            aria-label="Zoom in"
+          >
+            +
+          </button>
+        </div>
       </div>
+
       <div
-        className="relative rounded-[10px] overflow-hidden border border-[var(--border-subtle)] max-w-[360px]"
-        style={{ aspectRatio: '4 / 3', background: 'linear-gradient(135deg, #f3e0ea 0%, #e6cfe0 40%, #d9bfd8 100%)' }}
+        className="relative rounded-[10px] overflow-auto border border-[var(--border-subtle)] bg-[var(--skeleton-bg)]"
+        style={{ maxHeight: 460 }}
       >
-        <svg viewBox="0 0 100 75" className="absolute inset-0 w-full h-full" preserveAspectRatio="none">
-          {blobs.map((b, i) => (
-            <ellipse key={i} cx={b.x} cy={b.y} rx={b.r} ry={b.r * 0.7} fill="#c9a0c0" opacity={0.28} />
-          ))}
-          {regions.map((r, i) => (
-            <circle key={i} cx={r.x} cy={r.y} r={r.r} fill={heatColor(r.heat)} opacity={0.55} />
-          ))}
-        </svg>
+        {imgError ? (
+          <div className="p-6 text-[11px] text-[#FF3B30]">{imgError}</div>
+        ) : !imgUrl ? (
+          <div className="p-6 text-[11px] text-[var(--text-secondary)]">Loading slide…</div>
+        ) : (
+          <div style={{ width: `${zoom * 100}%`, position: 'relative', lineHeight: 0 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={imgUrl} alt={`Whole-slide image for ${slide.filename}`} style={{ width: '100%', display: 'block' }} />
+            {showHeat && canOverlay && (
+              <svg
+                viewBox={`0 0 ${sw} ${sh}`}
+                preserveAspectRatio="none"
+                className="absolute inset-0 w-full h-full"
+                style={{ pointerEvents: 'none' }}
+              >
+                {regions.map((r, i) => {
+                  // Tiles are 128px on a slide tens of thousands of px wide —
+                  // drawn at true scale they'd be invisible specks, so scale
+                  // the marker with the slide while keeping the centre honest.
+                  const rad = Math.max(sw, sh) * 0.012 * (0.55 + 0.45 * r.attention);
+                  return (
+                    <circle
+                      key={i}
+                      cx={r.x + r.size / 2}
+                      cy={r.y + r.size / 2}
+                      r={rad}
+                      fill={heatColor(r.attention)}
+                      opacity={hovered === null ? 0.42 + 0.3 * r.attention : hovered === i ? 0.85 : 0.12}
+                      stroke={hovered === i ? '#fff' : 'none'}
+                      strokeWidth={Math.max(sw, sh) * 0.002}
+                      style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+                      onMouseEnter={() => setHovered(i)}
+                      onMouseLeave={() => setHovered(null)}
+                    >
+                      <title>{`Region ${i + 1} — attention ${(r.attention * 100).toFixed(0)}% (slide x=${r.x}, y=${r.y})`}</title>
+                    </circle>
+                  );
+                })}
+              </svg>
+            )}
+          </div>
+        )}
       </div>
-      <div className="flex items-center gap-1.5 mt-2 max-w-[360px]">
-        <span className="text-[9px] text-[var(--text-secondary)]">Low</span>
-        <div className="h-1.5 flex-1 rounded-full" style={{ background: 'linear-gradient(90deg, #34C759, #FFCC00, #FF9500, #FF3B30)' }} />
-        <span className="text-[9px] text-[var(--text-secondary)]">High tumor probability</span>
-      </div>
+
+      {canOverlay && (
+        <>
+          <div className="flex items-center gap-1.5 mt-2">
+            <span className="text-[9px] text-[var(--text-secondary)]">Lower influence</span>
+            <div className="h-1.5 flex-1 rounded-full" style={{ background: 'linear-gradient(90deg, #34C759, #FFCC00, #FF9500, #FF3B30)' }} />
+            <span className="text-[9px] text-[var(--text-secondary)]">Drove the grade most</span>
+          </div>
+          <p className="text-[9px] text-[var(--text-secondary)]/70 mt-1.5 leading-relaxed">
+            Attention shows which sampled regions the model weighted when grading this slide. It is not a
+            tumour-probability map &mdash; the model was trained on slide-level grades only, never on
+            per-region tumour annotations.
+          </p>
+        </>
+      )}
+      {sw > 0 && (
+        <p className="text-[9px] text-[var(--text-secondary)]/60 mt-1">
+          Full slide {sw.toLocaleString()} × {sh.toLocaleString()} px · preview downsampled for display
+        </p>
+      )}
     </div>
   );
 }
+
+/** The six ISUP grade groups, with the plain-language meaning a report
+ *  carries. Text must match GRADE_TEXT_BY_GROUP in backend/trials.py, which
+ *  is what the server validates a correction against. */
+const GRADE_GROUPS: { group: number; text: string; meaning: string }[] = [
+  { group: 0, text: 'Benign / no tumor identified', meaning: 'No cancer identified' },
+  { group: 1, text: '3+3=6', meaning: 'Grade group 1 — low risk' },
+  { group: 2, text: '3+4=7', meaning: 'Grade group 2 — favourable intermediate' },
+  { group: 3, text: '4+3=7', meaning: 'Grade group 3 — unfavourable intermediate' },
+  { group: 4, text: '4+4=8', meaning: 'Grade group 4 — high risk' },
+  { group: 5, text: '4+5=9', meaning: 'Grade group 5 — very high risk' },
+];
 
 export default function TrialDetail() {
   const params = useParams();
@@ -227,6 +343,42 @@ export default function TrialDetail() {
   const [loading, setLoading] = useState(true);
   const [showAddPatient, setShowAddPatient] = useState(false);
   const [patientForm, setPatientForm] = useState({ patient_id: '', visit: 'Baseline', notes: '', site: '' });
+  // Enrolling an already-registered patient is what makes one person's record
+  // span trials; without it every enrollment would create a new patient and
+  // the cross-trial container could never hold more than one.
+  const [correcting, setCorrecting] = useState<{ patientId: string; slideId: string; filename: string; current: string } | null>(null);
+  const [enrolMode, setEnrolMode] = useState<'new' | 'existing'>('new');
+  const [registry, setRegistry] = useState<{ uid: string; initials: string; year_of_birth: number | null }[]>([]);
+  const [selectedUid, setSelectedUid] = useState('');
+  const [newProfile, setNewProfile] = useState({ initials: '', year_of_birth: '', sex: '' });
+  const [addError, setAddError] = useState('');
+  const [addingPatient, setAddingPatient] = useState(false);
+
+  // Records arrive one-per-visit and in no particular order. Group them by
+  // subject and put each subject's visits in chronological order, so the
+  // list reads as a timeline per person rather than scattered rows.
+  const orderedPatients = React.useMemo(() => {
+    const rank = (visit: string): number => {
+      const v = (visit || '').trim();
+      if (/\bscreen/i.test(v)) return -1;
+      if (/\b(baseline|bl|pre[- ]?treat|c1d1)\b/i.test(v)) return 0;
+      const m = v.match(/\b(day|week|month|year)s?\s*[-#]?\s*(\d+)/i);
+      if (m) {
+        const unit = { day: 1, week: 7, month: 30.44, year: 365.25 }[m[1].toLowerCase() as 'day' | 'week' | 'month' | 'year'];
+        return Number(m[2]) * unit;
+      }
+      const bare = v.match(/^\s*(\d+)\s*$/);
+      if (bare) return Number(bare[1]) * 7;
+      return Number.POSITIVE_INFINITY;  // unrecognised labels sort last
+    };
+    return [...patients].sort((a, b) => {
+      const s = a.patient_id.trim().toLowerCase().localeCompare(b.patient_id.trim().toLowerCase());
+      if (s !== 0) return s;
+      const r = rank(a.visit) - rank(b.visit);
+      if (r !== 0 && Number.isFinite(r)) return r;
+      return (a.created || '').localeCompare(b.created || '');
+    });
+  }, [patients]);
 
   const [esign, setEsign] = useState<ESignAction | null>(null);
   const [esignPassword, setEsignPassword] = useState('');
@@ -259,20 +411,55 @@ export default function TrialDetail() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  useEffect(() => {
+    if (!showAddPatient) return;
+    setAddError('');
+    apiSend('/api/patients/')
+      .then(d => setRegistry(Array.isArray(d) ? d : []))
+      .catch(() => setRegistry([]));
+  }, [showAddPatient]);
+
   const addPatient = async () => {
-    if (!patientForm.patient_id) return;
+    if (addingPatient) return;
+    setAddError('');
+    if (enrolMode === 'existing' && !selectedUid) {
+      setAddError('Choose which registered patient this visit belongs to.');
+      return;
+    }
+    const year = newProfile.year_of_birth.trim();
+    if (enrolMode === 'new' && year && !/^\d{4}$/.test(year)) {
+      setAddError('Year of birth should be a four-digit year, or left blank.');
+      return;
+    }
+    setAddingPatient(true);
     try {
-      await apiSend(`/api/trials/${trialId}/patients`, {
+      // The subject code is optional; the server falls back to the generated
+      // patient ID so a visit is never filed without an identifier.
+      const body: Record<string, unknown> = { ...patientForm };
+      if (enrolMode === 'existing') {
+        body.patient_uid = selectedUid;
+      } else {
+        body.profile = {
+          initials: newProfile.initials.trim().toUpperCase(),
+          year_of_birth: year ? Number(year) : null,
+          sex: newProfile.sex,
+          site: patientForm.site,
+        };
+      }
+      const created = await apiSend(`/api/trials/${trialId}/patients`, {
         method: 'POST',
-        body: JSON.stringify(patientForm),
+        body: JSON.stringify(body),
       });
       setShowAddPatient(false);
       setPatientForm({ patient_id: '', visit: 'Baseline', notes: '', site: '' });
+      setNewProfile({ initials: '', year_of_birth: '', sex: '' });
+      setSelectedUid(''); setEnrolMode('new');
       loadData();
-      toast.show(`Patient ${patientForm.patient_id} added`);
+      toast.show(`Patient ${created?.patient_uid || created?.patient_id || ''} added`);
     } catch (e) {
-      console.error('Failed to add patient', e);
-      toast.show(e instanceof Error ? e.message : 'Failed to add patient', 'error');
+      setAddError(e instanceof Error ? e.message : 'Failed to add patient');
+    } finally {
+      setAddingPatient(false);
     }
   };
 
@@ -314,16 +501,46 @@ export default function TrialDetail() {
       setTimeout(resolve, STAGE_MS * ANALYSIS_STAGES.length),
     );
     try {
-      const [res] = await Promise.all([
-        apiFetch(`/api/trials/patients/${patientId}/slides/${slideId}/analyze`, { method: 'POST' }),
-        minDelay,
-      ]);
+      // A 503 means the machine is saturated, not that the slide is bad —
+      // the backend sends Retry-After for exactly this. Previously nothing
+      // handled it, so a busy machine showed the pathologist a hard error
+      // and silently dropped the analysis. Wait and retry instead.
+      const MAX_BUSY_RETRIES = 3;
+      let res: Response | null = null;
+      for (let attempt = 0; attempt <= MAX_BUSY_RETRIES; attempt++) {
+        const [r] = await Promise.all([
+          apiFetch(`/api/trials/patients/${patientId}/slides/${slideId}/analyze`, { method: 'POST' }),
+          attempt === 0 ? minDelay : Promise.resolve(),
+        ]);
+        if (r.status !== 503 || attempt === MAX_BUSY_RETRIES) { res = r; break; }
+        const retryAfter = Number(r.headers.get('Retry-After')) || 30;
+        toast.show(
+          `${filename}: the analysis engine is busy. Retrying automatically in ${retryAfter}s…`,
+          'info',
+        );
+        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+      }
+      if (!res) throw new Error('Analysis could not be started');
       if (!res.ok) {
         const body = await res.json().catch(() => null);
+        if (res.status === 503) {
+          throw new Error(
+            `The analysis engine is still busy after several attempts. ${filename} was not analysed — try again once other analyses have finished.`,
+          );
+        }
         throw new Error(body?.detail || 'Analysis failed');
       }
+      const body = await res.json().catch(() => null);
       loadData();
-      toast.show(`AI analysis complete for ${filename} (prototype)`, 'info');
+      // The backend returns 200 with the slide even when the real model
+      // failed (status: "analysis_failed") — a failed run isn't an HTTP
+      // error, it's a normal response describing an unsuccessful analysis.
+      // Check the slide's own status rather than assume 200 means success.
+      if (body?.status === 'analysis_failed') {
+        toast.show(body?.model_error ? `AI analysis failed for ${filename}: ${body.model_error}` : `AI analysis failed for ${filename}`, 'error');
+      } else {
+        toast.show(`AI analysis complete for ${filename}`, 'info');
+      }
     } catch (e) {
       console.error('Failed to analyze slide', e);
       toast.show(e instanceof Error ? e.message : `AI analysis failed for ${filename}`, 'error');
@@ -416,8 +633,8 @@ export default function TrialDetail() {
           slide_filename: slide.filename,
           analysis_date: new Date().toISOString().split('T')[0],
           ai_grade: slide.grade || '',
-          ai_confidence: slide.confidence || 0,
-          tumor_size_mm: slide.size_mm || 0,
+          ai_confidence: slide.confidence ?? null,
+          tumor_size_mm: slide.size_mm ?? null,
           doctor_correction: slide.doctor_correction || null,
           grade_group: slide.grade_group ?? null,
           risk_group: slide.risk_group || '',
@@ -561,7 +778,7 @@ export default function TrialDetail() {
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
       {/* Header */}
-      <div className="border-b border-[var(--border-subtle)] px-6 py-3 bg-[var(--bg-card-solid)]">
+      <div className="titlebar-inset border-b border-[var(--border-subtle)] pr-6 py-3 bg-[var(--bg-card-solid)]">
         <button onClick={() => router.push('/dashboard')} className="flex items-center gap-1 text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] mb-1.5 transition-colors">
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Trials
         </button>
@@ -597,16 +814,30 @@ export default function TrialDetail() {
 
       {/* Patient List */}
       <div className="max-w-5xl mx-auto px-6 py-6">
+        <DrugProfile trialId={trialId} writable={writable} />
+        {patients.length > 0 && <CohortInsights trialId={trialId} />}
         {patients.length === 0 ? (
           <EmptyState icon={FileText} title="No patients yet" subtitle={writable ? 'Add your first patient to begin.' : 'No patients have been added yet.'} />
         ) : (
           <Card size="sm" className="overflow-hidden divide-y divide-[var(--border-subtle)]">
-            {patients.map((patient) => {
+            {orderedPatients.map((patient, idx) => {
               const patientQueries = queries.filter(q => q.patient_uuid === patient.id);
               const openCount = patientQueries.filter(q => q.status !== 'closed').length;
               const isExpanded = !!expandedQueries[patient.id];
+              // Each stored record is one visit. Group them so a subject reads
+              // as a single longitudinal entity rather than unrelated rows,
+              // and show the trajectory once, above that subject's visits.
+              const sameSubject = (p: Patient) =>
+                p.patient_id.trim().toLowerCase() === patient.patient_id.trim().toLowerCase();
+              const isFirstVisitOfSubject = orderedPatients.findIndex(sameSubject) === idx;
+              const subjectVisitCount = orderedPatients.filter(sameSubject).length;
               return (
               <div key={patient.id}>
+                {isFirstVisitOfSubject && subjectVisitCount > 1 && (
+                  <div className="px-4 pt-4">
+                    <SubjectTimeline trialId={trialId} patientId={patient.patient_id} />
+                  </div>
+                )}
                 <div className="flex items-center justify-between gap-2 flex-wrap px-4 py-2.5 bg-[var(--skeleton-bg)]">
                   <div className="flex items-center gap-2.5">
                     <span className="text-[13px] font-semibold">Patient {patient.patient_id}</span>
@@ -697,11 +928,13 @@ export default function TrialDetail() {
                 )}
 
                 {patient.slides.length > 0 && (
-                  <table className="w-full text-left border-collapse">
+                  <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full text-left border-collapse min-w-[640px]">
                     <tbody>
                       {patient.slides.map((slide) => {
                         const analyzing = !!analyzingIds[slide.id];
                         const hasAI = !!slide.grade && !analyzing;
+                        const analysisFailed = slide.status === 'analysis_failed' && !analyzing;
                         const isExpanded = !!expandedSlides[slide.id];
                         return (
                         <React.Fragment key={slide.id}>
@@ -725,6 +958,8 @@ export default function TrialDetail() {
                                 <>
                                   {`AI: ${slide.grade} ${slide.grade_group ? `· Grade Group ${slide.grade_group}` : ''} ${slide.confidence ? `(${(slide.confidence * 100).toFixed(0)}%)` : ''}`}
                                 </>
+                              ) : analysisFailed ? (
+                                <span className="text-[#FF3B30]" title={slide.model_error}>Analysis failed{slide.model_error ? `: ${slide.model_error}` : ''}</span>
                               ) : (
                                 'Awaiting analysis'
                               )}
@@ -767,19 +1002,24 @@ export default function TrialDetail() {
                               )}
                               {slide.confirmed ? (
                                 <span className="text-[11px] text-[#34C759] flex items-center gap-1 font-medium pr-1"><Check className="w-3.5 h-3.5" /> Done</span>
+                              ) : analysisFailed ? (
+                                writable ? (
+                                  <Button size="sm" className="!bg-[#FF3B30]/10 hover:!bg-[#FF3B30]/15 !text-[#FF3B30] !py-1 !px-2.5 !text-[11px]" onClick={() => runAnalysis(patient.id, slide.id, slide.filename)}>Retry Analysis</Button>
+                                ) : (
+                                  <span className="text-[11px] text-[#FF3B30]">Failed</span>
+                                )
                               ) : !hasAI ? (
                                 <span className="text-[11px] text-[var(--text-secondary)]">{analyzing ? '' : '—'}</span>
                               ) : writable ? (
                                 <>
                                   <Button size="sm" className="!bg-[#34C759]/10 hover:!bg-[#34C759]/15 !text-[#34C759] !py-1 !px-2.5 !text-[11px]" onClick={() => { setEsign({ mode: 'confirm', patientId: patient.id, slideId: slide.id }); setEsignPassword(''); setEsignError(''); }}>Confirm</Button>
-                                  <Button size="sm" className="!bg-[#FFCC00]/15 hover:!bg-[#FFCC00]/25 !text-[#8A6D00] !py-1 !px-2.5 !text-[11px]" onClick={async () => {
-                                    const c = await prompt({
-                                      title: 'Correct Grade',
-                                      message: `Enter the correct grade for ${slide.filename}.`,
-                                      placeholder: 'e.g. 4+3=7',
-                                      confirmLabel: 'Continue',
-                                    });
-                                    if (c) { setEsign({ mode: 'correct', patientId: patient.id, slideId: slide.id, correction: c }); setEsignPassword(''); setEsignError(''); }
+                                  {/* A correction is a training label, so it
+                                      must be one of the six grade groups.
+                                      Free text accepted "4+3=7", "Gleason
+                                      4+3" and typos alike, and none of those
+                                      resolve to a usable label. */}
+                                  <Button size="sm" className="!bg-[#FFCC00]/15 hover:!bg-[#FFCC00]/25 !text-[#8A6D00] !py-1 !px-2.5 !text-[11px]" onClick={() => {
+                                    setCorrecting({ patientId: patient.id, slideId: slide.id, filename: slide.filename, current: slide.grade || '' });
                                   }}>Correct</Button>
                                 </>
                               ) : (
@@ -792,12 +1032,30 @@ export default function TrialDetail() {
                           <tr className="border-t border-[var(--border-subtle)] bg-[var(--skeleton-bg)]/40">
                             <td colSpan={4} className="px-8 py-4">
                               <div className="flex items-center gap-2 mb-4 flex-wrap">
-                                <FlaskConical className="w-3.5 h-3.5 text-[#FF9500]" />
-                                <Pill accent="orange">Prototype — Simulated AI Output</Pill>
-                                <span className="text-[10px] text-[var(--text-secondary)]">Will be replaced by the trained model when integrated.</span>
+                                {slide.analysis_source === 'ai' ? (
+                                  <>
+                                    <Pill accent="blue">AI-Assessed Grade</Pill>
+                                    <span className="text-[10px] text-[var(--text-secondary)]">
+                                      Gleason grade, WHO/ISUP group and confidence are produced by the trained model
+                                      (single-fold, QWK 0.7996). Measurements the model does not produce are shown as
+                                      &ldquo;Not assessed&rdquo;.
+                                    </span>
+                                  </>
+                                ) : (
+                                  // Records analysed before the trained model was integrated still hold
+                                  // the old generated values. They must not be presented as model output.
+                                  <>
+                                    <FlaskConical className="w-3.5 h-3.5 text-[#FF9500]" />
+                                    <Pill accent="orange">Superseded result</Pill>
+                                    <span className="text-[10px] text-[var(--text-secondary)]">
+                                      Produced before the trained model was integrated. Re-analyse this slide for a
+                                      model-generated result.
+                                    </span>
+                                  </>
+                                )}
                               </div>
 
-                              <SlideHeatmapPreview slide={slide} />
+                              <SlideHeatmapPreview slide={slide} patientId={patient.id} />
 
                               <TrustDisclosure signed={slide.confirmed} />
 
@@ -830,26 +1088,31 @@ export default function TrialDetail() {
 
                               {/* Key pathological findings */}
                               <div className="mb-5">
-                                <p className="text-[9px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] mb-2">Key Pathological Findings</p>
+                                <p className="text-[9px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] mb-2">
+                                  Key Pathological Findings
+                                  {slide.analysis_source === 'ai' && (
+                                    <span className="ml-2 normal-case tracking-normal font-normal text-[var(--text-secondary)]">— not produced by this model</span>
+                                  )}
+                                </p>
                                 <div className="grid grid-cols-4 gap-3">
                                   <div className="rounded-[8px] border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-3 py-2">
                                     <p className="text-[10px] text-[var(--text-secondary)]">Tumor Size</p>
-                                    <p className="text-[13px] font-semibold">{slide.size_mm?.toFixed(1)} mm</p>
+                                    <p className="text-[13px] font-semibold">{slide.size_mm != null ? `${slide.size_mm.toFixed(1)} mm` : 'Not assessed'}</p>
                                   </div>
                                   <div className="rounded-[8px] border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-3 py-2">
                                     <p className="text-[10px] text-[var(--text-secondary)]">Tumor Involvement <InfoHint term="Tumour Involvement" /></p>
-                                    <p className="text-[13px] font-semibold">{slide.tumor_involvement_pct ?? '—'}%</p>
+                                    <p className="text-[13px] font-semibold">{slide.tumor_involvement_pct != null ? `${slide.tumor_involvement_pct}%` : 'Not assessed'}</p>
                                   </div>
                                   <div className="rounded-[8px] border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-3 py-2">
                                     <p className="text-[10px] text-[var(--text-secondary)]">Perineural Invasion <InfoHint term="Perineural Invasion" /></p>
-                                    <p className={`text-[13px] font-semibold ${slide.perineural_invasion ? 'text-[#FF3B30]' : 'text-[#34C759]'}`}>
-                                      {slide.perineural_invasion === undefined ? '—' : slide.perineural_invasion ? 'Present' : 'Absent'}
+                                    <p className={`text-[13px] font-semibold ${slide.perineural_invasion == null ? '' : slide.perineural_invasion ? 'text-[#FF3B30]' : 'text-[#34C759]'}`}>
+                                      {slide.perineural_invasion == null ? 'Not assessed' : slide.perineural_invasion ? 'Present' : 'Absent'}
                                     </p>
                                   </div>
                                   <div className="rounded-[8px] border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-3 py-2">
                                     <p className="text-[10px] text-[var(--text-secondary)]">Lymphovascular Invasion <InfoHint term="Lymphovascular Invasion" /></p>
-                                    <p className={`text-[13px] font-semibold ${slide.lymphovascular_invasion ? 'text-[#FF3B30]' : 'text-[#34C759]'}`}>
-                                      {slide.lymphovascular_invasion === undefined ? '—' : slide.lymphovascular_invasion ? 'Present' : 'Absent'}
+                                    <p className={`text-[13px] font-semibold ${slide.lymphovascular_invasion == null ? '' : slide.lymphovascular_invasion ? 'text-[#FF3B30]' : 'text-[#34C759]'}`}>
+                                      {slide.lymphovascular_invasion == null ? 'Not assessed' : slide.lymphovascular_invasion ? 'Present' : 'Absent'}
                                     </p>
                                   </div>
                                 </div>
@@ -874,15 +1137,15 @@ export default function TrialDetail() {
                                 <div className="mb-3">
                                   <p className="text-[9px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] mb-2">Quality Control</p>
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    <Pill accent={slide.quality.tissue_quality === 'Adequate' ? 'green' : 'orange'}>Tissue: {slide.quality.tissue_quality}</Pill>
-                                    <Pill accent={slide.quality.staining_quality === 'Optimal' ? 'green' : 'orange'}>Staining: {slide.quality.staining_quality}</Pill>
-                                    <Pill accent={slide.quality.artifacts_detected === 'None' ? 'green' : 'orange'}>Artifacts: {slide.quality.artifacts_detected}</Pill>
+                                    <Pill accent={slide.quality.tissue_quality === 'Adequate' ? 'green' : slide.quality.tissue_quality === 'Not assessed' ? 'gray' : 'orange'}>Tissue: {slide.quality.tissue_quality}</Pill>
+                                    <Pill accent={slide.quality.staining_quality === 'Optimal' ? 'green' : slide.quality.staining_quality === 'Not assessed' ? 'gray' : 'orange'}>Staining: {slide.quality.staining_quality}</Pill>
+                                    <Pill accent={slide.quality.artifacts_detected === 'None' ? 'green' : slide.quality.artifacts_detected === 'Not assessed' ? 'gray' : 'orange'}>Artifacts: {slide.quality.artifacts_detected}</Pill>
                                   </div>
                                 </div>
                               )}
 
                               <p className="text-[10px] text-[var(--text-secondary)]/70">
-                                {slide.regions_analyzed?.toLocaleString()} regions analyzed · {slide.suspicious_regions} flagged · {slide.processing_time_s}s processing · {slide.model_version}
+                                {slide.regions_analyzed?.toLocaleString()} regions analyzed · {slide.suspicious_regions != null ? `${slide.suspicious_regions} flagged` : 'flagging not assessed'} · {slide.processing_time_s}s processing · {slide.model_version}
                               </p>
                             </td>
                           </tr>
@@ -892,6 +1155,7 @@ export default function TrialDetail() {
                       })}
                     </tbody>
                   </table>
+                  </div>
                 )}
               </div>
             );})}
@@ -903,9 +1167,87 @@ export default function TrialDetail() {
       {showAddPatient && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4" onClick={() => setShowAddPatient(false)}>
           <Card size="lg" className="w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
-            <h2 className="text-[17px] font-bold mb-4">Add Patient</h2>
+            <h2 className="text-[17px] font-bold mb-1">Add a visit</h2>
+            <p className="text-[12px] text-[var(--text-secondary)] mb-4">
+              Every visit belongs to a registered patient. Register a new one, or enrol
+              someone already on file.
+            </p>
+
+            {/* Mode switch. "Existing" is what lets one person's record span
+                several trials. */}
+            <div className="flex items-center gap-1 p-1 rounded-[10px] bg-[var(--skeleton-bg)] mb-4">
+              {([['new', 'New patient'], ['existing', 'Existing patient']] as const).map(([m, label]) => (
+                <button
+                  key={m}
+                  onClick={() => { setEnrolMode(m); setAddError(''); }}
+                  className={
+                    'flex-1 px-3 py-1.5 rounded-[8px] text-[12px] font-medium transition-colors ' +
+                    (enrolMode === m
+                      ? 'bg-[var(--bg-card-solid)] text-[var(--text-primary)] shadow-sm'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]')
+                  }
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
             <div className="space-y-3">
-              <input placeholder="Patient ID (e.g. 001)" value={patientForm.patient_id} onChange={e => setPatientForm({...patientForm, patient_id: e.target.value})} className="w-full px-3 py-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-[13px]" />
+              {enrolMode === 'existing' ? (
+                registry.length === 0 ? (
+                  <p className="text-[12px] text-[var(--text-secondary)] rounded-[10px] border border-[var(--border-subtle)] px-3 py-2.5">
+                    No patients are registered yet. Use &ldquo;New patient&rdquo; instead.
+                  </p>
+                ) : (
+                  <div>
+                    <label htmlFor="ap-uid" className="block text-[12.5px] font-medium mb-1.5">Registered patient</label>
+                    <select
+                      id="ap-uid" value={selectedUid}
+                      onChange={e => { setSelectedUid(e.target.value); setAddError(''); }}
+                      className="w-full px-3 py-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-[13px]"
+                    >
+                      <option value="">Select a patient…</option>
+                      {registry.map(r => (
+                        <option key={r.uid} value={r.uid}>
+                          {r.uid}{r.initials ? ` · ${r.initials}` : ''}{r.year_of_birth ? ` · b. ${r.year_of_birth}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )
+              ) : (
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label htmlFor="ap-initials" className="block text-[12.5px] font-medium mb-1.5">Initials</label>
+                    <input id="ap-initials" maxLength={4} placeholder="AB" value={newProfile.initials}
+                      onChange={e => setNewProfile({...newProfile, initials: e.target.value})}
+                      className="w-full px-3 py-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-[13px]" />
+                  </div>
+                  <div>
+                    <label htmlFor="ap-yob" className="block text-[12.5px] font-medium mb-1.5">Birth year</label>
+                    <input id="ap-yob" inputMode="numeric" placeholder="1958" value={newProfile.year_of_birth}
+                      onChange={e => setNewProfile({...newProfile, year_of_birth: e.target.value})}
+                      className="w-full px-3 py-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-[13px]" />
+                  </div>
+                  <div>
+                    <label htmlFor="ap-sex" className="block text-[12.5px] font-medium mb-1.5">Sex</label>
+                    <select id="ap-sex" value={newProfile.sex}
+                      onChange={e => setNewProfile({...newProfile, sex: e.target.value})}
+                      className="w-full px-3 py-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-[13px]">
+                      <option value="">—</option>
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label htmlFor="ap-code" className="block text-[12.5px] font-medium mb-1.5">Subject code</label>
+                <input id="ap-code" placeholder="Optional — e.g. S-001" value={patientForm.patient_id} onChange={e => setPatientForm({...patientForm, patient_id: e.target.value})} className="w-full px-3 py-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-[13px]" />
+                <p className="text-[11px] text-[var(--text-secondary)] mt-1.5">This site&rsquo;s own label for the patient in this trial. The generated patient ID is used if left blank.</p>
+              </div>
               {trial.sites?.length > 0 ? (
                 <select value={patientForm.site} onChange={e => setPatientForm({...patientForm, site: e.target.value})} className="w-full px-3 py-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-[13px]">
                   <option value="">Select site (optional)</option>
@@ -924,9 +1266,49 @@ export default function TrialDetail() {
               </select>
               <input placeholder="Notes (optional)" value={patientForm.notes} onChange={e => setPatientForm({...patientForm, notes: e.target.value})} className="w-full px-3 py-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-[13px]" />
             </div>
+            {addError && (
+              <p role="alert" className="text-[12px] text-[#FF3B30] mt-3">{addError}</p>
+            )}
             <div className="flex justify-end gap-3 mt-6">
-              <Button variant="ghost" onClick={() => setShowAddPatient(false)}>Cancel</Button>
-              <Button onClick={addPatient}>Add</Button>
+              <Button variant="ghost" onClick={() => setShowAddPatient(false)} disabled={addingPatient}>Cancel</Button>
+              <Button onClick={addPatient} disabled={addingPatient}>{addingPatient ? 'Adding…' : 'Add'}</Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Correct grade — a selection, not free text */}
+      {correcting && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4" onClick={() => setCorrecting(null)}>
+          <Card size="lg" className="w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+            <h2 className="text-[17px] font-bold mb-1">Correct the grade</h2>
+            <p className="text-[12px] text-[var(--text-secondary)] mb-1">{correcting.filename}</p>
+            {correcting.current && (
+              <p className="text-[12px] text-[var(--text-secondary)] mb-4">
+                Omnia reported <strong className="text-[var(--text-primary)]">{correcting.current}</strong>. Choose the correct grade.
+              </p>
+            )}
+            <div className="space-y-1.5 max-h-[320px] overflow-y-auto custom-scrollbar">
+              {GRADE_GROUPS.map(g => (
+                <button
+                  key={g.group}
+                  onClick={() => {
+                    setEsign({ mode: 'correct', patientId: correcting.patientId, slideId: correcting.slideId, correction: g.text });
+                    setEsignPassword(''); setEsignError(''); setCorrecting(null);
+                  }}
+                  className="w-full text-left px-3.5 py-2.5 rounded-[10px] border border-[var(--border-medium)] hover:border-[#007AFF] hover:bg-[#007AFF]/[0.04] transition-colors"
+                >
+                  <p className="text-[13px] font-semibold">{g.text}</p>
+                  <p className="text-[11px] text-[var(--text-secondary)]">{g.meaning}</p>
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-[var(--text-secondary)] mt-3 leading-relaxed">
+              Your correction is recorded against your signature and becomes a teaching example for
+              this site&rsquo;s model.
+            </p>
+            <div className="flex justify-end mt-4">
+              <Button variant="ghost" onClick={() => setCorrecting(null)}>Cancel</Button>
             </div>
           </Card>
         </div>

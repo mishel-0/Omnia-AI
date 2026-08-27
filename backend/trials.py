@@ -5,16 +5,74 @@ import shutil
 import datetime
 from pathlib import Path
 from typing import Optional, BinaryIO
-from backend.analysis_engine import analyze_slide
+from backend.analysis_engine import analyze_slide, AnalysisFailedError
 from backend.storage import read_json, write_json, safe_filename, transaction
+from backend import patients as registry
 
 DATA_DIR = Path(os.environ.get("OMNIA_DATA_DIR", ".")) / "data"
 TRIALS_FILE = DATA_DIR / "trials.json"
 PATIENTS_FILE = DATA_DIR / "patients.json"
 SLIDES_DIR = DATA_DIR / "slides"
+# Rendered slide thumbnails. Derived data — safe to delete, rebuilt on demand.
+THUMB_CACHE_DIR = DATA_DIR / "thumb_cache"
 
 ALLOWED_SLIDE_EXTENSIONS = (".svs",)
 MAX_NAME_LEN = 200
+
+# A trial in a regulated setting is identified by its registry/protocol number,
+# not by an internal nickname — two sponsors can both run an "ALK-427". The
+# field is optional so existing records stay valid, but it is captured at
+# creation because retro-fitting an identifier onto accumulated slide data is
+# how records get mismatched.
+MAX_PROTOCOL_LEN = 100
+
+# Phases are a closed vocabulary; free text here makes cohorts unfilterable.
+# "" means the coordinator has not stated one.
+TRIAL_PHASES = (
+    "", "Preclinical", "Phase I", "Phase I/II", "Phase II",
+    "Phase II/III", "Phase III", "Phase IV", "Observational",
+)
+
+# Canonical text for each ISUP grade group. Kept here (not imported from
+# analysis_engine) because corrections are validated at the storage layer.
+GRADE_TEXT_BY_GROUP = {
+    0: "Benign / no tumor identified",
+    1: "3+3=6",
+    2: "3+4=7",
+    3: "4+3=7",
+    4: "4+4=8",
+    5: "4+5=9",
+}
+
+
+def grade_group_from_text(text: str):
+    """Resolve a pathologist's correction to an ISUP grade group, or None.
+
+    Accepts the canonical text, a bare group number, or a Gleason pattern
+    written with incidental spaces. Anything it cannot resolve returns None
+    so the caller rejects it rather than storing an unusable label.
+    """
+    raw = (text or "").strip()
+    if not raw:
+        return None
+    if raw.isdigit() and 0 <= int(raw) <= 5:
+        return int(raw)
+    squashed = "".join(raw.split()).lower()
+    for group, canonical in GRADE_TEXT_BY_GROUP.items():
+        if squashed == "".join(canonical.split()).lower():
+            return group
+    # "4+3=7" and "4+3" both identify group 3; the sum is redundant.
+    import re as _re
+    m = _re.match(r"^(?:gleason)?(\d)\+(\d)(?:=\d+)?$", squashed)
+    if m:
+        primary, secondary = int(m.group(1)), int(m.group(2))
+        for group, canonical in GRADE_TEXT_BY_GROUP.items():
+            if canonical.startswith(f"{primary}+{secondary}"):
+                return group
+    if "benign" in squashed:
+        return 0
+    return None
+
 
 class ValidationError(ValueError):
     """Raised for invalid caller input; routes translate this to HTTP 400."""
@@ -32,7 +90,8 @@ def _write_json(path, data):
 # ─── Trials ───
 
 def create_trial(name: str, sponsor: str, drug: str, indication: str, notes: str = "",
-                  sites: Optional[list] = None) -> dict:
+                  sites: Optional[list] = None, protocol_id: str = "",
+                  phase: str = "") -> dict:
     _init()
     name = (name or "").strip()
     sponsor = (sponsor or "").strip()
@@ -43,13 +102,21 @@ def create_trial(name: str, sponsor: str, drug: str, indication: str, notes: str
         raise ValidationError("Sponsor is required")
     if not drug:
         raise ValidationError("Drug is required")
+    protocol_id = (protocol_id or "").strip()
+    phase = (phase or "").strip()
     for label, value in (("Trial name", name), ("Sponsor", sponsor), ("Drug", drug),
                          ("Indication", indication or "")):
         if len(value) > MAX_NAME_LEN:
             raise ValidationError(f"{label} must be {MAX_NAME_LEN} characters or fewer")
+    if len(protocol_id) > MAX_PROTOCOL_LEN:
+        raise ValidationError(f"Protocol ID must be {MAX_PROTOCOL_LEN} characters or fewer")
+    if phase not in TRIAL_PHASES:
+        raise ValidationError(f"Phase must be one of: {', '.join(p for p in TRIAL_PHASES if p)}")
     trial = {
         "id": str(uuid.uuid4())[:8],
         "name": name,
+        "protocol_id": protocol_id,
+        "phase": phase,
         "sponsor": sponsor,
         "drug": drug,
         "indication": indication,
@@ -108,7 +175,7 @@ def _delete_trial_locked(trial_id: str) -> bool:
                 try:
                     path = Path(fp)
                     # Only ever unlink inside our own slides directory.
-                    if path.is_file() and SLIDES_DIR.resolve() in path.resolve().parents:
+                    if path.is_file() and _is_managed_slide_path(path):
                         path.unlink()
                 except OSError:
                     pass
@@ -127,8 +194,9 @@ def _delete_trial_locked(trial_id: str) -> bool:
 
 # ─── Patients ───
 
-def add_patient(trial_id: str, patient_id: str, visit: str = "Baseline", notes: str = "",
-                site: str = "") -> Optional[dict]:
+def add_patient(trial_id: str, patient_id: str = "", visit: str = "Baseline", notes: str = "",
+                site: str = "", patient_uid: str = "",
+                profile: Optional[dict] = None) -> Optional[dict]:
     """Add a patient to a trial. Returns None if the trial does not exist so the
     caller can 404 instead of silently creating an orphan record."""
     _init()
@@ -139,10 +207,26 @@ def add_patient(trial_id: str, patient_id: str, visit: str = "Baseline", notes: 
         raise ValidationError(
             "This trial is closed. Reopen it before adding patients."
         )
-    patient_id = (patient_id or "").strip()
     visit = (visit or "Baseline").strip() or "Baseline"
-    if not patient_id:
-        raise ValidationError("Patient ID is required")
+
+    # Resolve which person this visit belongs to. Either the caller names an
+    # already-registered patient, or one is registered now — a visit is never
+    # filed against a bare string again, which is what allowed the same
+    # subject to split into several under slightly different spellings.
+    if patient_uid:
+        known = registry.get_patient(patient_uid)
+        if not known:
+            raise ValidationError("No patient is registered with that ID")
+        patient_uid = known["uid"]
+    else:
+        known = registry.create_patient(**(profile or {}))
+        patient_uid = known["uid"]
+    registry.ensure_container(patient_uid)
+
+    # The subject code is the site's own label for this person within this
+    # trial. It is optional: when a site has not assigned one, the generated
+    # patient ID stands in, so the record is never unlabelled.
+    patient_id = (patient_id or "").strip() or patient_uid
     if len(patient_id) > MAX_NAME_LEN:
         raise ValidationError(f"Patient ID must be {MAX_NAME_LEN} characters or fewer")
     # A patient may legitimately appear at several visits, but the same
@@ -154,6 +238,7 @@ def add_patient(trial_id: str, patient_id: str, visit: str = "Baseline", notes: 
     patient = {
         "id": str(uuid.uuid4())[:8],
         "trial_id": trial_id,
+        "patient_uid": patient_uid,
         "patient_id": patient_id,
         "visit": visit,
         "notes": notes,
@@ -193,14 +278,29 @@ def update_patient(patient_uuid: str, updates: dict)  -> Optional[dict]:
                 return p
     return None
 
+def _is_managed_slide_path(path: Path) -> bool:
+    """True if `path` is a slide file this application owns.
+
+    Slides live either in the legacy flat directory or inside a patient
+    container; both are under our data directory. Anything else — a path a
+    record was doctored to point at — must never be unlinked.
+    """
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return False
+    roots = (SLIDES_DIR.resolve(), registry.PATIENT_ROOT.resolve())
+    return any(root in resolved.parents for root in roots)
+
+
 def _remove_slide_file(slide: dict):
-    """Delete a slide's stored file, but only ever inside our own slides dir."""
+    """Delete a slide's stored file, only if this application owns it."""
     fp = slide.get("filepath")
     if not fp:
         return
     try:
         path = Path(fp)
-        if path.is_file() and SLIDES_DIR.resolve() in path.resolve().parents:
+        if path.is_file() and _is_managed_slide_path(path):
             path.unlink()
     except OSError:
         pass
@@ -268,6 +368,36 @@ def _refresh_trial_slide_stats(trial_id: str):
         "slides_confirmed": confirmed,
     })
 
+def _assert_readable_slide(path: str):
+    """Raise ValidationError unless openslide can actually open this file.
+
+    Imported lazily: openslide pulls in a native library, and the rest of
+    trial/patient management must keep working on a machine where slide
+    support isn't available.
+    """
+    if os.environ.get("OMNIA_TEST_FAKE_GRADING") == "1":
+        return  # test fixtures upload dummy bytes on purpose; see grading_model.predict
+    try:
+        import openslide
+    except Exception:
+        # No slide support installed — accept the file rather than block
+        # uploads outright, and let analysis report the real problem.
+        return
+    try:
+        slide = openslide.OpenSlide(path)
+    except Exception as e:
+        raise ValidationError(
+            "This file could not be opened as a whole-slide image. It may be "
+            f"corrupt, incomplete, or an unsupported format. ({e})"
+        )
+    try:
+        w, h = slide.dimensions
+        if w <= 0 or h <= 0:
+            raise ValidationError("This slide reports no image dimensions and cannot be analysed.")
+    finally:
+        slide.close()
+
+
 def add_slide_upload(patient_uuid: str, filename: str, source: BinaryIO) -> Optional[dict]:
     """Stream an uploaded slide file to disk and register it against the patient.
 
@@ -288,7 +418,16 @@ def add_slide_upload(patient_uuid: str, filename: str, source: BinaryIO) -> Opti
         raise ValidationError("This trial is closed. Reopen it before uploading slides.")
 
     slide_id = str(uuid.uuid4())[:8]
-    stored_path = SLIDES_DIR / f"{slide_id}_{filename}"
+    # Slides are filed in the owning patient's container so a person's
+    # material lives in one place on disk. Records written before containers
+    # existed keep their absolute path in the slide record and still resolve,
+    # so this does not orphan anything; SLIDES_DIR remains the fallback for
+    # any visit that predates the registry.
+    _uid = patient.get("patient_uid")
+    if _uid:
+        stored_path = registry.ensure_container(_uid)["slides"] / f"{slide_id}_{filename}"
+    else:
+        stored_path = SLIDES_DIR / f"{slide_id}_{filename}"
     try:
         with open(stored_path, "wb") as dest:
             shutil.copyfileobj(source, dest, length=1024 * 1024)
@@ -298,6 +437,22 @@ def add_slide_upload(patient_uuid: str, filename: str, source: BinaryIO) -> Opti
             stored_path.unlink(missing_ok=True)
         except OSError:
             pass
+        raise
+
+    if file_size == 0:
+        stored_path.unlink(missing_ok=True)
+        raise ValidationError("That file is empty.")
+
+    # Verify the file is actually a readable whole-slide image NOW, while the
+    # user is still watching the upload — not tens of seconds later when
+    # analysis fails. A correct .svs extension proves nothing: a renamed
+    # PDF, a truncated transfer, or an unsupported vendor format all reach
+    # this point looking fine. Rejecting here also stops unreadable files
+    # accumulating on disk against patient records.
+    try:
+        _assert_readable_slide(str(stored_path))
+    except ValidationError:
+        stored_path.unlink(missing_ok=True)
         raise
 
     slide = {
@@ -352,8 +507,9 @@ def _recompute_patient_status(patient: dict):
 
 def run_analysis(patient_uuid: str, slide_id: str) -> Optional[dict]:
     with transaction():
-        """Run (mock or real) AI analysis on a slide and store the results.
-        See backend/analysis_engine.py for the model integration point."""
+        """Run the trained grading model on a slide and store the results.
+        See backend/analysis_engine.py. Raises AnalysisFailedError rather
+        than storing a substitute grade if the model cannot run."""
         patients = _read_json(PATIENTS_FILE)
         for p in patients:
             if p["id"] == patient_uuid:
@@ -365,7 +521,17 @@ def run_analysis(patient_uuid: str, slide_id: str) -> Optional[dict]:
                             raise ValidationError(
                                 "This slide has been electronically signed and cannot be re-analyzed."
                             )
-                        result = analyze_slide(s["filename"], s.get("filepath", ""))
+                        try:
+                            result = analyze_slide(s["filename"], s.get("filepath", ""))
+                        except AnalysisFailedError as e:
+                            # A failed analysis must surface as a failure, not
+                            # silently leave the slide in its prior state or
+                            # (worse) show a fabricated grade. The pathologist
+                            # sees "analysis failed" and can retry or escalate.
+                            s["status"] = "analysis_failed"
+                            s["model_error"] = str(e)
+                            _write_json(PATIENTS_FILE, patients)
+                            return s
                         s["grade"] = result["grade"]
                         s["grade_group"] = result["grade_group"]
                         s["confidence"] = result["confidence"]
@@ -382,6 +548,10 @@ def run_analysis(patient_uuid: str, slide_id: str) -> Optional[dict]:
                         s["processing_time_s"] = result["processing_time_s"]
                         s["model_version"] = result["model_version"]
                         s["analysis_source"] = result["source"]
+                        s["attention_regions"] = result.get("attention_regions", [])
+                        s["slide_width"] = result.get("slide_width")
+                        s["slide_height"] = result.get("slide_height")
+                        s["model_error"] = None
                         s["status"] = "analyzed"
                         _write_json(PATIENTS_FILE, patients)
                         return s
@@ -428,6 +598,19 @@ def correct_slide(patient_uuid: str, slide_id: str, correction: str, signed_by: 
                         correction = (correction or "").strip()
                         if not correction:
                             raise ValidationError("A corrected grade is required")
+                        # Corrections are the ground-truth labels a fine-tune
+                        # learns from, so they must be one of the six ISUP
+                        # grade groups rather than free text. "4+3=7" and
+                        # "Gleason 4+3" and "4 + 3 = 7" were all accepted
+                        # before and none of them resolve to a label.
+                        corrected_group = grade_group_from_text(correction)
+                        if corrected_group is None:
+                            raise ValidationError(
+                                "Corrected grade must be one of: "
+                                + "; ".join(f"{g} ({t})" for g, t in GRADE_TEXT_BY_GROUP.items())
+                            )
+                        correction = GRADE_TEXT_BY_GROUP[corrected_group]
+                        s["corrected_grade_group"] = corrected_group
                         s["confirmed"] = True
                         s["doctor_correction"] = correction
                         s["signed_by"] = signed_by

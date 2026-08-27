@@ -100,6 +100,13 @@
   .titlebar-no-drag {
     -webkit-app-region: no-drag;
   }
+  /* The window uses titleBarStyle: 'hiddenInset', so macOS draws its close/
+     minimise/zoom buttons over the top-left of the page. Any header that
+     starts at the left edge ends up underneath them — the app title was
+     sitting behind the green button. Reserve that space. */
+  .titlebar-inset {
+    padding-left: 84px;
+  }
 
   /* Apple Health Card Styles */
   .health-card {

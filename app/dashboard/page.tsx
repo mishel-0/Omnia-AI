@@ -2,16 +2,21 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, FlaskConical, Users, Download, Trash2, ShieldCheck, ScrollText, LogOut, ChevronDown, Search, Archive, RotateCcw, BookOpen, GraduationCap } from 'lucide-react';
+import { Plus, FlaskConical, Users, Download, Trash2, ShieldCheck, ScrollText, LogOut, ChevronDown, Search, Archive, RotateCcw, BookOpen, GraduationCap, ArrowRight } from 'lucide-react';
 import { Card, Button, BrandMark, Pill, EmptyState, TableSkeleton } from '@/components/ui';
 import { apiFetch, apiSend, useAuth, canWrite, ROLE_LABELS } from '@/lib/auth';
 import { useToast } from '@/lib/toast';
 import { useDialogs } from '@/lib/dialogs';
 import { useOnboarding } from '@/lib/onboarding';
+import CreateTrialDialog, { TrialDraft } from './components/CreateTrialDialog';
+import SystemHealth from './components/SystemHealth';
 
 interface Trial {
   id: string;
   name: string;
+  /** Added after first release — absent on trials registered before then. */
+  protocol_id?: string;
+  phase?: string;
   sponsor: string;
   drug: string;
   indication: string;
@@ -32,7 +37,6 @@ export default function TrialDashboard() {
   const [showMenu, setShowMenu] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'closed'>('all');
-  const [form, setForm] = useState({ name: '', sponsor: '', drug: '', indication: '', notes: '', sites: '' });
   const router = useRouter();
   const { user, logout } = useAuth();
   const writable = canWrite(user?.role);
@@ -64,22 +68,17 @@ export default function TrialDashboard() {
 
   useEffect(() => { loadTrials(); }, []);
 
-  const createTrial = async () => {
-    if (!form.name || !form.sponsor || !form.drug) return;
-    try {
-      const sites = form.sites.split(',').map(s => s.trim()).filter(Boolean);
-      await apiSend('/api/trials/', {
-        method: 'POST',
-        body: JSON.stringify({ ...form, sites }),
-      });
-      setShowCreate(false);
-      setForm({ name: '', sponsor: '', drug: '', indication: '', notes: '', sites: '' });
-      loadTrials();
-      toast.show(`Trial "${form.name}" created`);
-    } catch (e) {
-      console.error('Failed to create trial', e);
-      toast.show(e instanceof Error ? e.message : 'Failed to create trial', 'error');
-    }
+  // Throws on failure. The dialog catches it, keeps the entered data on
+  // screen, and shows the server's reason — previously a rejected create
+  // closed nothing and left only a toast.
+  const createTrial = async (draft: TrialDraft) => {
+    await apiSend('/api/trials/', {
+      method: 'POST',
+      body: JSON.stringify(draft),
+    });
+    setShowCreate(false);
+    loadTrials();
+    toast.show(`Trial "${draft.name}" registered`);
   };
 
   const deleteTrial = async (id: string, name: string) => {
@@ -135,7 +134,7 @@ export default function TrialDashboard() {
   const visibleTrials = trials.filter((t) => {
     if (statusFilter !== 'all' && t.status !== statusFilter) return false;
     if (!q) return true;
-    return [t.name, t.sponsor, t.drug, t.indication]
+    return [t.name, t.protocol_id || '', t.phase || '', t.sponsor, t.drug, t.indication]
       .some((f) => (f || '').toLowerCase().includes(q));
   });
 
@@ -146,6 +145,49 @@ export default function TrialDashboard() {
     slides: trials.reduce((n, t) => n + (t.slides_analyzed || 0), 0),
     pending: trials.reduce((n, t) => n + Math.max(0, (t.slides_analyzed || 0) - (t.slides_confirmed || 0)), 0),
   };
+
+  const greeting = (() => {
+    const h = new Date().getHours();
+    return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+  })();
+  // Greet by name, not by title. Splitting on the first word alone produced
+  // "Good afternoon, Dr" for anyone entered as "Dr Sarah Chen", so skip a
+  // leading honorific. Clinicians commonly enter their title in this field.
+  const displayName = (() => {
+    const TITLES = /^(dr|dr\.|prof|prof\.|mr|mr\.|mrs|mrs\.|ms|ms\.|miss|md|phd)$/i;
+    const parts = (user?.full_name || '').trim().split(/\s+/).filter(Boolean);
+    const hadTitle = parts.length > 1 && TITLES.test(parts[0]);
+    const named = hadTitle ? parts.slice(1) : parts;
+    if (named.length === 0) return 'there';
+    // With a title, surname reads more naturally ("Dr Chen"); without one,
+    // the given name does ("Sarah").
+    return hadTitle ? `${parts[0]} ${named[named.length - 1]}` : named[0];
+  })();
+
+  const reviewedPct = totals.slides > 0
+    ? Math.round(((totals.slides - totals.pending) / totals.slides) * 100)
+    : 0;
+
+  // One bar per trial that has analysed slides, height = share signed.
+  const trialBars = trials
+    .filter((t) => (t.slides_analyzed || 0) > 0)
+    .slice(0, 12)
+    .map((t) => ({
+      id: t.id,
+      name: t.name,
+      analyzed: t.slides_analyzed || 0,
+      confirmed: t.slides_confirmed || 0,
+      pct: Math.round(((t.slides_confirmed || 0) / (t.slides_analyzed || 1)) * 100),
+    }));
+
+  // Jump straight to the trial carrying the most unreviewed work.
+  const firstPendingTrial = [...trials]
+    .filter((t) => (t.slides_analyzed || 0) - (t.slides_confirmed || 0) > 0)
+    .sort((a, b) =>
+      ((b.slides_analyzed || 0) - (b.slides_confirmed || 0)) -
+      ((a.slides_analyzed || 0) - (a.slides_confirmed || 0)))[0];
+
+  const totalOpenQueries = Object.values(openQueries).reduce((n, v) => n + (v || 0), 0);
 
   if (loading) {
     return (
@@ -169,15 +211,33 @@ export default function TrialDashboard() {
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
       {/* Top Bar */}
-      <div className="border-b border-[var(--border-subtle)] px-6 py-3.5 flex items-center justify-between bg-[var(--bg-card-solid)]">
-        <div className="flex items-center gap-3">
-          <BrandMark size={32} />
-          <div>
-            <h1 className="text-[15px] font-semibold">Omnia Pathology AI</h1>
-            <p className="text-[11px] text-[var(--text-secondary)]">Clinical Trial Pathology Suite — Research Use Only</p>
+      <div className="titlebar-drag titlebar-inset border-b border-[var(--border-subtle)] pr-6 py-3 flex items-center justify-between gap-4 bg-[var(--bg-card-solid)]">
+        <div className="flex items-center gap-2.5 shrink-0">
+          <BrandMark size={30} />
+          <div className="hidden lg:block">
+            <h1 className="text-[14px] font-semibold leading-tight">Omnia Pathology AI</h1>
+            <p className="text-[10px] text-[var(--text-secondary)] leading-tight">Research Use Only</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+
+        {/* Primary sections as pills. These were previously buried in the
+            account dropdown, which put the audit trail and user management
+            three clicks away from the screen a coordinator lives on. */}
+        <nav className="titlebar-no-drag flex items-center gap-1 min-w-0 overflow-x-auto">
+          <NavPill active label="Dashboard" onClick={() => {}} />
+          <NavPill label="Patients" onClick={() => router.push('/dashboard/patients')} />
+          {(user?.role === 'admin' || user?.role === 'monitor') && (
+            <NavPill label="Audit Trail" onClick={() => router.push('/dashboard/audit')} />
+          )}
+          {user?.role === 'admin' && (
+            <NavPill label="Users" onClick={() => router.push('/dashboard/users')} />
+          )}
+          {writable && (
+            <NavPill label="Model" onClick={() => router.push('/dashboard/training')} />
+          )}
+        </nav>
+
+        <div className="titlebar-no-drag flex items-center gap-2 shrink-0">
           {writable && (
             <Button size="sm" onClick={() => setShowCreate(true)}>
               <Plus className="w-3.5 h-3.5" />
@@ -226,14 +286,6 @@ export default function TrialDashboard() {
                       <GraduationCap className="w-3.5 h-3.5 text-[var(--text-secondary)]" /> Model Training
                     </button>
                   )}
-                  {(user?.role === 'admin' || user?.role === 'pathologist') && (
-                    <button
-                      onClick={() => { setShowMenu(false); router.push('/dashboard/training'); }}
-                      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-[8px] text-[12px] hover:bg-[var(--skeleton-bg)] text-left"
-                    >
-                      <GraduationCap className="w-3.5 h-3.5 text-[var(--text-secondary)]" /> Model Training
-                    </button>
-                  )}
                   <button
                     onClick={() => { setShowMenu(false); openGuide(); }}
                     className="w-full flex items-center gap-2 px-2.5 py-2 rounded-[8px] text-[12px] hover:bg-[var(--skeleton-bg)] text-left"
@@ -260,33 +312,135 @@ export default function TrialDashboard() {
         </div>
       </div>
 
-      {/* Trial List */}
-      <div className="max-w-6xl mx-auto px-6 py-6">
-        {trials.length === 0 ? (
-          <EmptyState
-            icon={FlaskConical}
-            title="No trials yet"
-            subtitle={writable ? 'Create your first clinical trial to get started.' : 'No trials have been created yet.'}
-            action={writable ? <Button size="lg" onClick={() => setShowCreate(true)}>Create Trial</Button> : undefined}
-          />
-        ) : (
-          <>
-          {/* Portfolio summary — the numbers a coordinator checks first */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
-            {[
-              { label: 'Trials', value: totals.trials },
-              { label: 'Active', value: totals.active },
-              { label: 'Patients', value: totals.patients },
-              { label: 'Slides', value: totals.slides },
-              { label: 'Awaiting Review', value: totals.pending, accent: totals.pending > 0 ? '#FF9500' : undefined },
-            ].map((s) => (
-              <Card key={s.label} size="sm" className="px-4 py-3">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">{s.label}</p>
-                <p className="text-[20px] font-bold tabular-nums mt-0.5" style={{ color: s.accent }}>{s.value}</p>
-              </Card>
-            ))}
+      <SystemHealth />
+
+      {/* Greeting + at-a-glance figures.
+          Rendered unconditionally: this is the page header, not a data
+          widget. Hiding it until a trial exists meant a fresh install showed
+          nothing but an empty state, so the dashboard looked unchanged on
+          exactly the screen a new user sees first. Zero is a valid figure. */}
+      <div className="max-w-6xl mx-auto px-6 pt-7 pb-1">
+        <div className="flex items-end justify-between gap-6 flex-wrap">
+          <div>
+            <h2 className="text-[26px] font-semibold tracking-[-0.5px] leading-tight">
+              {greeting}, <span className="text-[#007AFF]">{displayName}</span>
+            </h2>
+            <p className="text-[12.5px] text-[var(--text-secondary)] mt-1">
+              {trials.length === 0
+                ? 'No trials yet — create one to begin.'
+                : totals.pending > 0
+                  ? `${totals.pending} slide${totals.pending === 1 ? '' : 's'} awaiting your review`
+                  : 'Everything analysed has been reviewed and signed'}
+            </p>
           </div>
 
+          {/* Figures read left-to-right in the order a coordinator checks
+              them: how much work exists, how much is done, what is left. */}
+          <div className="flex items-stretch gap-6">
+            <Metric label="Patients" value={totals.patients} />
+            <Divider />
+            <Metric label="Slides analysed" value={totals.slides} />
+            <Divider />
+            <Metric
+              label="Awaiting review"
+              value={totals.pending}
+              accent={totals.pending > 0 ? '#FF9500' : undefined}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Trial List */}
+      <div className="max-w-6xl mx-auto px-6 py-6">
+          {/* Overview row. Three cards: what is done, what needs a person,
+              and how the portfolio is split. */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-5">
+            {/* Review progress — real completion, not a decorative gauge */}
+            <div className="rounded-[16px] border border-[var(--border-subtle)] bg-[var(--bg-card-solid)] p-5">
+              <div className="flex items-center justify-between gap-2 mb-4">
+                <p className="text-[13px] font-semibold">Review progress</p>
+                <span className="text-[11px] text-[var(--text-secondary)] tabular-nums">
+                  {reviewedPct}%
+                </span>
+              </div>
+              <div className="flex items-end justify-start gap-1.5 h-[72px] mb-3">
+                {trialBars.length === 0 ? (
+                  <p className="text-[11px] text-[var(--text-secondary)]">No slides analysed yet.</p>
+                ) : trialBars.map((b) => (
+                  // Bars are capped in width and left-aligned. With flex-1 and
+                  // a single trial the "chart" became one solid slab filling
+                  // the card, which reads as a rendering fault rather than as
+                  // one trial's progress.
+                  <div key={b.id} className="flex-1 max-w-[40px] flex flex-col justify-end h-full min-w-[12px]" title={`${b.name}: ${b.confirmed}/${b.analyzed} signed`}>
+                    <div className="w-full rounded-t-[5px] bg-[var(--skeleton-bg)] relative" style={{ height: '100%' }}>
+                      <div
+                        className="absolute bottom-0 left-0 right-0 rounded-t-[5px] bg-[#007AFF]"
+                        style={{ height: `${b.pct}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center gap-4 text-[11px] text-[var(--text-secondary)]">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-[2px] bg-[#007AFF]" /> Signed {totals.slides - totals.pending}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-[2px] bg-[var(--skeleton-bg)] border border-[var(--border-subtle)]" /> Pending {totals.pending}
+                </span>
+              </div>
+            </div>
+
+            {/* The one accent card — deliberately the only saturated surface on
+                the page, so the eye lands on the outstanding work first. */}
+            <div className="rounded-[16px] p-5 flex flex-col justify-between" style={{ background: 'linear-gradient(145deg, #007AFF 0%, #0A63D6 100%)' }}>
+              <div>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[13px] font-semibold text-white/95">Needs a pathologist</p>
+                  <span className="text-[10px] font-medium text-white/80 bg-white/15 rounded-full px-2 py-0.5">
+                    {totals.active} active
+                  </span>
+                </div>
+                <p className="text-[38px] font-semibold text-white leading-none tabular-nums mt-3">
+                  {totals.pending}
+                </p>
+                <p className="text-[12px] text-white/85 leading-relaxed mt-2">
+                  {totals.pending > 0
+                    ? 'Analysed slides become part of the record only once a qualified pathologist confirms or corrects the grade.'
+                    : 'No slides are waiting. Every analysed slide carries a signature.'}
+                </p>
+              </div>
+              {firstPendingTrial && (
+                <button
+                  onClick={() => router.push(`/dashboard/trials/${firstPendingTrial.id}`)}
+                  className="mt-4 self-start inline-flex items-center gap-1.5 text-[12px] font-medium text-[#007AFF] bg-white rounded-full px-3.5 py-1.5 hover:bg-white/90 transition-colors"
+                >
+                  Open {firstPendingTrial.name} <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Portfolio split */}
+            <div className="rounded-[16px] border border-[var(--border-subtle)] bg-[var(--bg-card-solid)] p-5">
+              <p className="text-[13px] font-semibold mb-4">Portfolio</p>
+              <div className="space-y-3">
+                <PortfolioRow label="Trials" value={totals.trials} />
+                <PortfolioRow label="Active" value={totals.active} accent="#34C759" />
+                <PortfolioRow label="Closed" value={totals.trials - totals.active} />
+                <PortfolioRow label="Open queries" value={totalOpenQueries} accent={totalOpenQueries > 0 ? '#FF9500' : undefined} />
+              </div>
+            </div>
+          </div>
+
+          {trials.length === 0 ? (
+            <EmptyState
+              icon={FlaskConical}
+              title="No trials yet"
+              subtitle={writable ? 'Create your first clinical trial to get started.' : 'No trials have been created yet.'}
+              action={writable ? <Button size="lg" onClick={() => setShowCreate(true)}>Create Trial</Button> : undefined}
+            />
+          ) : (
+          <>
           {/* Search + status filter */}
           <div className="flex items-center gap-2 mb-3 flex-wrap">
             <div className="relative flex-1 min-w-[220px]">
@@ -324,7 +478,8 @@ export default function TrialDashboard() {
             />
           ) : (
           <Card size="sm" className="overflow-hidden">
-            <table className="w-full text-left border-collapse">
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full text-left border-collapse min-w-[640px]">
               <thead>
                 <tr className="border-b border-[var(--border-subtle)] bg-[var(--skeleton-bg)]">
                   <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Trial</th>
@@ -346,8 +501,20 @@ export default function TrialDashboard() {
                     onClick={() => router.push(`/dashboard/trials/${trial.id}`)}
                   >
                     <td className="px-4 py-3">
-                      <p className="text-[13px] font-semibold">{trial.name}</p>
-                      <p className="text-[11px] text-[var(--text-secondary)]">{trial.sponsor} · {trial.drug}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-[13px] font-semibold">{trial.name}</p>
+                        {trial.phase && (
+                          <span className="text-[10px] font-medium text-[var(--text-secondary)] bg-[var(--skeleton-bg)] rounded-full px-2 py-0.5 whitespace-nowrap">
+                            {trial.phase}
+                          </span>
+                        )}
+                      </div>
+                      {/* The registry ID is the trial's real identifier, so it
+                          sits with the name rather than being captured and
+                          never shown. */}
+                      <p className="text-[11px] text-[var(--text-secondary)]">
+                        {trial.protocol_id ? `${trial.protocol_id} · ` : ''}{trial.sponsor} · {trial.drug}
+                      </p>
                     </td>
                     <td className="px-4 py-3 text-[12px] text-[var(--text-secondary)]">{trial.indication}</td>
                     <td className="px-4 py-3 text-[12px] text-[var(--text-secondary)]">
@@ -415,62 +582,62 @@ export default function TrialDashboard() {
                 ))}
               </tbody>
             </table>
+              </div>
           </Card>
           )}
           </>
         )}
       </div>
 
-      {/* Create Trial Modal */}
-      {showCreate && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4" onClick={() => setShowCreate(false)}>
-          <Card size="lg" className="w-full max-w-lg p-6" onClick={e => e.stopPropagation()}>
-            <h2 className="text-[17px] font-bold mb-4">Create New Trial</h2>
-            <div className="space-y-3">
-              <input
-                placeholder="Trial name (e.g. ALK-427)"
-                value={form.name}
-                onChange={e => setForm({ ...form, name: e.target.value })}
-                className="w-full px-3 py-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-[13px]"
-              />
-              <input
-                placeholder="Sponsor (e.g. Roche)"
-                value={form.sponsor}
-                onChange={e => setForm({ ...form, sponsor: e.target.value })}
-                className="w-full px-3 py-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-[13px]"
-              />
-              <input
-                placeholder="Drug (e.g. Tecentriq)"
-                value={form.drug}
-                onChange={e => setForm({ ...form, drug: e.target.value })}
-                className="w-full px-3 py-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-[13px]"
-              />
-              <input
-                placeholder="Indication (e.g. Lung Cancer)"
-                value={form.indication}
-                onChange={e => setForm({ ...form, indication: e.target.value })}
-                className="w-full px-3 py-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-[13px]"
-              />
-              <input
-                placeholder="Sites (comma-separated, e.g. Site A - Boston, Site B - Chicago)"
-                value={form.sites}
-                onChange={e => setForm({ ...form, sites: e.target.value })}
-                className="w-full px-3 py-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-[13px]"
-              />
-              <textarea
-                placeholder="Notes (optional)"
-                value={form.notes}
-                onChange={e => setForm({ ...form, notes: e.target.value })}
-                className="w-full px-3 py-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-[13px] resize-none h-20"
-              />
-            </div>
-            <div className="flex justify-end gap-3 mt-6">
-              <Button variant="ghost" onClick={() => setShowCreate(false)}>Cancel</Button>
-              <Button onClick={createTrial}>Create Trial</Button>
-            </div>
-          </Card>
-        </div>
-      )}
+      <CreateTrialDialog
+        open={showCreate}
+        onCancel={() => setShowCreate(false)}
+        onSubmit={createTrial}
+      />
+    </div>
+  );
+}
+
+/** Top-bar section pill. Active is a solid fill so the current section is
+ * unambiguous at a glance, matching how the rest of the app marks state. */
+function NavPill({ label, active, onClick }: { label: string; active?: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-current={active ? 'page' : undefined}
+      className={
+        'px-3.5 py-1.5 rounded-full text-[12.5px] font-medium whitespace-nowrap transition-colors ' +
+        (active
+          ? 'bg-[#007AFF] text-white'
+          : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--skeleton-bg)]')
+      }
+    >
+      {label}
+    </button>
+  );
+}
+
+/** A single headline figure in the greeting strip. */
+function Metric({ label, value, accent }: { label: string; value: number; accent?: string }) {
+  return (
+    <div className="min-w-[92px]">
+      <p className="text-[11px] text-[var(--text-secondary)] whitespace-nowrap">{label}</p>
+      <p className="text-[24px] font-semibold tabular-nums leading-tight mt-0.5" style={{ color: accent }}>
+        {value.toLocaleString()}
+      </p>
+    </div>
+  );
+}
+
+function Divider() {
+  return <div className="w-px self-stretch bg-[var(--border-subtle)]" aria-hidden="true" />;
+}
+
+function PortfolioRow({ label, value, accent }: { label: string; value: number; accent?: string }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-[12px] text-[var(--text-secondary)]">{label}</span>
+      <span className="text-[14px] font-semibold tabular-nums" style={{ color: accent }}>{value}</span>
     </div>
   );
 }

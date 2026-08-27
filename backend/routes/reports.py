@@ -1,10 +1,14 @@
 """Omnia AI — Pathology Report API Routes."""
+import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from fastapi.responses import Response
 from backend.pathology_report import generate_pathology_pdf, generate_trial_summary_pdf
 from backend.trials import get_trial, list_patients
+from backend import patients as registry
+
+logger = logging.getLogger("omnia-pathology")
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -17,8 +21,8 @@ class PatientReportRequest(BaseModel):
     slide_filename: str = ""
     analysis_date: str = ""
     ai_grade: str = ""
-    ai_confidence: float = 0.0
-    tumor_size_mm: float = 0.0
+    ai_confidence: Optional[float] = None
+    tumor_size_mm: Optional[float] = None
     biomarkers: dict = {}
     treatment_response: str = ""
     prior_size_mm: float = 0.0
@@ -35,6 +39,10 @@ class PatientReportRequest(BaseModel):
     suspicious_regions: Optional[int] = None
     processing_time_s: Optional[float] = None
     model_version: str = ""
+    # When set, the generated PDF is also filed in this patient's container so
+    # the issued document can be retrieved later. A report that exists only in
+    # the browser's downloads folder is not a record.
+    patient_uid: str = ""
 
 @router.post("/patient")
 def generate_patient_report(req: PatientReportRequest):
@@ -68,6 +76,26 @@ def generate_patient_report(req: PatientReportRequest):
             processing_time_s=req.processing_time_s,
             model_version=req.model_version,
         )
+        if req.patient_uid:
+            # Filing must not cost the caller their report: if the container
+            # write fails, the PDF is still returned and the failure logged,
+            # rather than turning a successful report into a 500.
+            try:
+                registry.save_report(
+                    req.patient_uid,
+                    f"{req.patient_id}_report.pdf",
+                    pdf,
+                    meta={
+                        "trial_name": req.trial_name,
+                        "visit": req.visit,
+                        "slide_filename": req.slide_filename,
+                        "grade_group": req.grade_group,
+                        "model_version": req.model_version,
+                    },
+                )
+            except Exception as file_err:  # noqa: BLE001 - see comment above
+                logger.warning("Could not file report for %s: %s", req.patient_uid, file_err)
+
         return Response(
             content=pdf,
             media_type="application/pdf",

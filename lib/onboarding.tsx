@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import {
   FlaskConical, Users, Upload, Sparkles, PenLine, MessageSquareWarning,
   ScrollText, FileDown, ShieldCheck, ArrowRight, ArrowLeft, X, Check,
-  HelpCircle, Search, BookOpen, Info, ChevronDown, Lock,
+  HelpCircle, Search, BookOpen, Info, ChevronDown, Lock, Microscope,
 } from 'lucide-react';
 import { Card, Button, BrandMark } from '@/components/ui';
 
@@ -40,8 +40,8 @@ export const GUIDE_STEPS: GuideStep[] = [
   {
     icon: Sparkles,
     title: 'AI analysis runs automatically',
-    body: 'Each slide is analysed for Gleason score, WHO/ISUP Grade Group, tumour burden, adverse features, and a biomarker panel.',
-    detail: 'This build ships a clearly-labelled PROTOTYPE analysis engine that produces simulated results. It is replaced by the trained model at integration — the workflow around it is already final.',
+    body: 'Each slide is analysed for Gleason score and WHO/ISUP Grade Group, with an attention map showing which regions drove the result.',
+    detail: 'A trained attention-based model samples 32 tissue regions per slide and weights them to reach a slide-level grade. It scored 0.7996 QWK on 1,827 held-out slides. It does not measure tumour burden, invasion, or biomarkers — those show as “Not assessed”.',
   },
   {
     icon: PenLine,
@@ -231,7 +231,7 @@ export const GLOSSARY: Record<string, string> = {
   'Confidence Score': 'How certain the analysis engine is in its own grade — not a measure of how advanced the disease is. Low confidence is a cue to look closer, not a diagnosis in itself.',
   'Electronic Signature': 'Re-entering your password to confirm or correct a grade. It is the legal marker that a qualified human, not the AI, is responsible for the final result.',
   'Audit Trail': 'An append-only log of every sign-in, edit, analysis, signature and query, kept in 21 CFR Part 11 style for sponsor inspection.',
-  'Research Use Only': 'This build’s analysis engine is a labelled prototype, not a certified diagnostic device. The workflow, records and audit trail around it are production-ready.',
+  'Research Use Only': 'The grading model is not a certified diagnostic device and has not been cleared by any regulator. It is a single-fold model validated only on held-out PANDA data, never externally on other hospitals’ slides. Every result requires pathologist sign-off.',
 };
 
 /** Trust-building answers to the questions doctors actually ask before relying on the app. */
@@ -243,7 +243,7 @@ export const FAQ: FaqEntry[] = [
   },
   {
     q: 'Is the AI grade a final diagnosis?',
-    a: 'No. Every AI-generated grade is a prototype suggestion. It only becomes part of the record once a qualified pathologist confirms or corrects it and re-enters their password as an electronic signature.',
+    a: 'No. Every AI-generated grade is a suggestion for review. It only becomes part of the record once a qualified pathologist confirms or corrects it and re-enters their password as an electronic signature.',
   },
   {
     q: 'What happens after I sign a slide?',
@@ -263,7 +263,7 @@ export const FAQ: FaqEntry[] = [
   },
   {
     q: 'Why does the app say "Research Use Only"?',
-    a: 'Because the analysis engine shipped in this build is a clearly-labelled prototype, not a certified diagnostic device. It will be swapped for the trained model without changing the review, signature or audit workflow around it.',
+    a: 'Because the grading model has not been cleared by any regulator as a diagnostic device. It is a single-fold model validated on held-out PANDA data only, never externally on other hospitals’ slides, and it grades prostate biopsies specifically. A qualified pathologist reviews and signs every result.',
   },
 ];
 
@@ -472,11 +472,21 @@ export function TrustDisclosure({ signed }: { signed?: boolean }) {
       {expanded && (
         <div className="px-3.5 pb-3.5 pt-0.5 space-y-2.5">
           <div className="flex items-start gap-2.5">
+            <Microscope className="w-3.5 h-3.5 text-[#007AFF] shrink-0 mt-0.5" />
+            <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+              The grade comes from an <strong className="text-[var(--text-primary)]">attention-based
+              deep learning model</strong> trained on the PANDA prostate biopsy dataset. It samples
+              32 tissue regions from the slide, scores each one, and weights them to reach a
+              slide-level ISUP grade.
+            </p>
+          </div>
+          <div className="flex items-start gap-2.5">
             <FlaskConical className="w-3.5 h-3.5 text-[#FF9500] shrink-0 mt-0.5" />
             <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
-              This build&apos;s analysis engine is a labelled <strong className="text-[var(--text-primary)]">prototype</strong>.
-              It reasons over real slide metadata but does not yet run a trained grading model —
-              it will be swapped in without changing anything below.
+              It scored <strong className="text-[var(--text-primary)]">0.7996 QWK</strong> on 1,827
+              held-out slides &mdash; a single-fold model, not externally validated on other
+              hospitals&apos; data. It grades prostate biopsies only, and will still return a grade
+              if given other tissue. It does not measure tumour size, invasion, or biomarkers.
             </p>
           </div>
           <div className="flex items-start gap-2.5">
