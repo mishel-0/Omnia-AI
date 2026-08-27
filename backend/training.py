@@ -1,26 +1,18 @@
 """Omnia AI — Model fine-tuning job manager.
 
-The training dataset is real: every slide a pathologist has confirmed or
-corrected becomes a labelled example, which is exactly the data used to
-fine-tune a grading model on site-specific material.
+Every slide a pathologist has confirmed or corrected is a labelled example.
+This module owns the *job*: readiness checks, starting a run, reporting
+progress, cancellation, and history. The training itself lives in
+`backend.finetune`, which trains the model's attention and classifier heads
+on those labels and only replaces the active model when agreement with the
+pathologist improves on slides it was not trained on.
 
-── Current status ──
-`_run_job()` SIMULATES the optimisation loop. No model weights exist yet and
-none are written. It reports honest, hardware-derived timing and a plausible
-loss curve so the surrounding workflow (readiness checks, progress, history,
-audit) can be built and demonstrated now.
-
-── To plug in real training ──
-Replace the body of `_run_job()` with the actual loop: build the dataset from
-`collect_training_examples()`, train, and call `_publish()` after each epoch
-with the true loss/accuracy. Everything else — the API, progress reporting,
-cancellation, and history — already works against that contract.
+The backbone stays frozen — see `backend/finetune.py` for why that is a real
+constraint at clinic data scale rather than a shortcut.
 """
 import datetime
 import os
-import random
 import threading
-import time
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -76,6 +68,47 @@ def collect_training_examples() -> dict:
         "minimum_required": MIN_EXAMPLES,
         "ready": confirmed >= MIN_EXAMPLES,
     }
+
+
+def labelled_examples() -> list:
+    """Every signed slide as {"filepath", "grade_group", ...}.
+
+    A slide the pathologist corrected carries their grade; one they confirmed
+    unchanged carries the grade they agreed with. Both are ground truth. A
+    slide whose label cannot be resolved is skipped rather than guessed at,
+    because a wrong label teaches the model the wrong thing.
+    """
+    from backend.trials import grade_group_from_text
+
+    out = []
+    for trial in list_trials():
+        for p in list_patients(trial["id"]):
+            for sl in p.get("slides", []):
+                if not sl.get("confirmed"):
+                    continue
+                path = sl.get("filepath")
+                if not path or not Path(path).exists():
+                    continue
+
+                if sl.get("doctor_correction"):
+                    # Prefer the structured group recorded at correction time;
+                    # fall back to parsing for slides signed before that field
+                    # existed.
+                    group = sl.get("corrected_grade_group")
+                    if group is None:
+                        group = grade_group_from_text(sl["doctor_correction"])
+                else:
+                    group = sl.get("grade_group")
+
+                if group is None:
+                    continue
+                out.append({
+                    "filepath": path,
+                    "grade_group": int(group),
+                    "slide_id": sl.get("id"),
+                    "corrected": bool(sl.get("doctor_correction")),
+                })
+    return out
 
 
 def readiness() -> dict:
@@ -143,19 +176,34 @@ def _publish(run_id: str, **fields):
     _save_run(snapshot)
 
 
-def reconcile_interrupted_runs():
-    """A run marked 'running' in storage cannot survive a process restart.
-    Mark such records interrupted so history never shows an eternal run."""
+def reconcile_interrupted_runs() -> int:
+    """Mark stored runs that can no longer be in progress as interrupted.
+
+    A record left in "running" state after a restart would otherwise show an
+    eternal progress bar and block new runs forever.
+
+    Critically, this skips the run that IS currently executing in this
+    process. Called at startup that distinction never mattered, but the
+    background recovery worker calls it on a schedule, and without the check
+    it would mark a live training run as interrupted a couple of minutes
+    into its first epoch.
+
+    Returns the number of records repaired.
+    """
+    with _job_lock:
+        live_id = _active["id"] if _active and _active.get("state") == "running" else None
+
     with transaction():
         runs = read_json(RUNS_FILE, [])
-        changed = False
+        changed = 0
         for r in runs:
-            if r.get("state") == "running":
+            if r.get("state") == "running" and r.get("id") != live_id:
                 r["state"] = "interrupted"
                 r["message"] = "Interrupted — the application was closed during training"
-                changed = True
+                changed += 1
         if changed:
             write_json(RUNS_FILE, runs)
+        return changed
 
 
 def start(started_by: str) -> dict:
@@ -201,14 +249,14 @@ def start(started_by: str) -> dict:
         "epoch": 0,
         "progress": 0.0,
         "loss": None,
-        "accuracy": None,
+        "qwk": None,
+        "promoted": None,
         "history": [],
         "estimated_seconds": info["estimate"]["estimated_seconds"],
         "eta_seconds": info["estimate"]["estimated_seconds"],
         "hardware": info["hardware"]["cpu_name"],
         "accelerator": info["hardware"]["accelerator"],
         "profile": {k: profile[k] for k in ("tier", "label", "tile_size", "batch_size", "epochs", "precision")},
-        "simulated": True,   # flips to False once real training is wired in
         "message": "Preparing dataset",
     }
 
@@ -222,57 +270,66 @@ def start(started_by: str) -> dict:
 
 
 def _run_job(run_id: str):
-    """SIMULATED optimisation loop — see module docstring for the real swap point."""
+    """Real fine-tuning. Publishes true loss and true held-out agreement."""
     global _active
+    from backend import finetune
+
     try:
+        examples = labelled_examples()
+
+        def progress(fields: dict):
+            # finetune emits partial updates; forward whatever it reports.
+            _publish(run_id, **fields)
+
+        def cancelled() -> bool:
+            return _cancel.is_set()
+
         with _job_lock:
             if not _active or _active["id"] != run_id:
                 return
             epochs = _active["epochs_total"]
-            total_seconds = max(_active["estimated_seconds"], 8)
 
-        # The simulated run is bounded so it can be demonstrated, while the
-        # hardware-derived figure stays visible separately as the real estimate.
-        wall_clock = min(total_seconds, 45)
-        per_epoch = wall_clock / epochs
-        rng = random.Random(run_id)
-        loss = rng.uniform(0.82, 0.95)
-        acc = rng.uniform(0.55, 0.62)
+        summary = finetune.run_finetune(
+            examples,
+            epochs=max(1, epochs),
+            progress=progress,
+            should_cancel=cancelled,
+        )
 
-        for epoch in range(1, epochs + 1):
-            steps = 10
-            for _ in range(steps):
-                if _cancel.is_set():
-                    _publish(run_id, state="cancelled", message="Cancelled by user",
-                             finished_at=datetime.datetime.now().isoformat())
-                    return
-                time.sleep(per_epoch / steps)
+        # State reflects what happened to the MODEL, not just to the job. A run
+        # that completed but did not improve grading is "completed" with
+        # promoted=False, never presented as a successful update.
+        _publish(
+            run_id,
+            state="completed",
+            progress=1.0,
+            eta_seconds=0,
+            promoted=summary["promoted"],
+            baseline_qwk=summary["baseline_qwk"],
+            finetuned_qwk=summary["finetuned_qwk"],
+            examples_used=summary["examples_used"],
+            train_size=summary["train_size"],
+            val_size=summary["val_size"],
+            best_epoch=summary["best_epoch"],
+            history=summary["history"],
+            message=(
+                f"Agreement improved {summary['baseline_qwk']:.3f} → "
+                f"{summary['finetuned_qwk']:.3f}. The updated model is now in use."
+                if summary["promoted"] else
+                f"Agreement did not improve ({summary['baseline_qwk']:.3f} → "
+                f"{summary['finetuned_qwk']:.3f}). The existing model has been kept."
+            ),
+            finished_at=datetime.datetime.now().isoformat(),
+        )
 
-            # Loss decays with diminishing returns; accuracy climbs toward a plateau.
-            loss = max(0.06, loss * rng.uniform(0.74, 0.88))
-            acc = min(0.97, acc + (0.97 - acc) * rng.uniform(0.22, 0.38))
-            progress = epoch / epochs
-            # Count down the time this run will actually take. Reporting the
-            # full-hardware estimate here would show minutes remaining on a run
-            # that finishes in seconds.
-            remaining = int(wall_clock * (1 - progress))
-
-            _publish(
-                run_id,
-                epoch=epoch,
-                progress=round(progress, 4),
-                loss=round(loss, 4),
-                accuracy=round(acc, 4),
-                eta_seconds=remaining,
-                message=f"Epoch {epoch} of {epochs}",
-                history=((status() or {}).get("history", []) if (status() or {}).get("id") == run_id else []) + [
-                    {"epoch": epoch, "loss": round(loss, 4), "accuracy": round(acc, 4)}
-                ],
-            )
-
-        _publish(run_id, state="completed", progress=1.0, eta_seconds=0,
-                 message="Training complete",
-                 finished_at=datetime.datetime.now().isoformat())
+    except finetune.FineTuneError as e:
+        cancelled_run = str(e) == "Cancelled" or _cancel.is_set()
+        _publish(
+            run_id,
+            state="cancelled" if cancelled_run else "failed",
+            message="Cancelled by user" if cancelled_run else str(e),
+            finished_at=datetime.datetime.now().isoformat(),
+        )
     except Exception as e:  # never leave a run wedged in "running"
         _publish(run_id, state="failed", message=str(e),
                  finished_at=datetime.datetime.now().isoformat())

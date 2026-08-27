@@ -194,20 +194,47 @@ def assess_capability(hw: dict) -> dict:
 
 
 def estimate_training(profile: dict, slide_count: int) -> dict:
-    """Estimate wall-clock training time for a dataset of `slide_count` slides.
+    """Estimate wall-clock fine-tuning time for `slide_count` reviewed slides.
 
-    Assumes a fixed number of usable tiles per whole-slide image; the real figure
-    depends on tissue area, so this is presented to the user as an estimate.
+    This models what training actually does (see backend/finetune.py), not a
+    generic full-network training run. The two phases have very different
+    costs:
+
+      1. Feature extraction — one forward pass of the frozen backbone over
+         each slide's tile bag. This dominates, and it happens once per slide
+         because the result is cached on disk.
+      2. Head training — many epochs, but only over small cached feature
+         vectors, so each epoch is a rounding error next to one slide's
+         extraction.
+
+    An earlier version assumed 220 tiles per slide re-processed on every
+    epoch, which described training the whole network from scratch. It
+    overstated the time by roughly two orders of magnitude and would have
+    told a user to expect hours for a job that takes minutes.
     """
-    tiles_per_slide = 220
-    total_tiles = max(slide_count, 0) * tiles_per_slide * profile["epochs"]
+    from backend.grading_model import N_TILES
+
+    slide_count = max(slide_count, 0)
     tps = profile["tiles_per_sec"] or 1
-    seconds = total_tiles / tps
+
+    extraction_tiles = slide_count * N_TILES
+    extraction_seconds = extraction_tiles / tps
+    # Head training touches no images: cost scales with epochs and examples
+    # but each step is a handful of small matrix multiplies. Measured at well
+    # under a second per epoch for datasets of this size; allow headroom.
+    head_seconds = profile["epochs"] * max(slide_count / 200.0, 0.05)
+    # Slide I/O that the tile throughput figure does not cover.
+    io_seconds = slide_count * 1.5
+
+    seconds = extraction_seconds + head_seconds + io_seconds
     return {
-        "tiles_per_slide": tiles_per_slide,
-        "total_tiles": total_tiles,
+        "tiles_per_slide": N_TILES,
+        "total_tiles": extraction_tiles,
+        "extraction_seconds": int(extraction_seconds),
         "estimated_seconds": int(seconds),
         "estimated_human": _human_duration(seconds),
+        "note": ("Most of this is reading the slides once. Slides analysed before "
+                 "are already prepared and are skipped."),
     }
 
 
