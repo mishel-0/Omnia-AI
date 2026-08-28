@@ -25,3 +25,8 @@ rdkit>=2024.3.1
 # platforms, so no system package is required for a packaged build. A
 # source checkout on macOS may still prefer Homebrew's copy
 # (`brew install openslide`); omnia-backend.spec bundles whichever is found.
+
+# Test-only: tests/smoke_inference.py generates a tiled TIFF that OpenSlide can
+# open, so a packaged build can be proven to actually grade a slide on each
+# platform without committing a large .svs to the repository.
+tifffile>=2024.1.0

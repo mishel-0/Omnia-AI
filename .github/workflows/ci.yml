@@ -29,6 +29,12 @@ jobs:
           # no separate "start backend" step needed.
           python3 tests/integration_api_test.py
 
+      # Proves the model can actually grade a slide, not merely that its
+      # dependencies import. Runs on every push so a regression in the
+      # inference path is caught before a release is cut.
+      - name: End-to-end inference smoke test
+        run: python3 tests/smoke_inference.py
+
   typecheck:
     runs-on: ubuntu-latest
     steps:

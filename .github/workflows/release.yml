@@ -43,6 +43,11 @@ jobs:
       # Release assets live in separate storage from Actions artifacts, so a
       # ~270MB installer here never touches the (often very small) Actions
       # artifact storage quota — the thing that broke every prior release.
+      - name: Grade a slide on macOS
+        run: |
+          pip install tifffile
+          python3 tests/smoke_inference.py
+
       - name: Publish DMG to release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
@@ -131,6 +136,17 @@ jobs:
           finally {
             if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
           }
+
+      # Preflight proves the dependencies loaded. It does not prove a slide can
+      # be graded: OpenSlide reporting a version means the DLL loaded, not that
+      # its driver can open a slide and read tiles, and importing torch is not
+      # a forward pass. This runs the real path end to end on Windows.
+      - name: Grade a slide on Windows
+        shell: pwsh
+        run: |
+          pip install tifffile
+          python tests/smoke_inference.py
+          if ($LASTEXITCODE -ne 0) { throw "Inference failed on Windows" }
 
       - name: Validate installer
         shell: pwsh
