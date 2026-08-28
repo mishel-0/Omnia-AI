@@ -9,4 +9,4 @@ bug accurately, and support cannot tell what they are actually running.
 Keep this in step with package.json. tests/integration_api_test.py fails if
 they diverge, so the drift cannot silently return.
 """
-__version__ = "1.2.2"
+__version__ = "1.2.3"

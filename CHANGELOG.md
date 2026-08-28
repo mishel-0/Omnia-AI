@@ -15,6 +15,19 @@ smoke-test and publish the macOS and Windows installers.
 
 ---
 
+## [1.2.3] — 2026-08-28
+
+### Added
+
+- **End-to-end inference smoke test**, run on macOS and Windows before a
+  release publishes and on every push. The Windows check previously confirmed
+  the bundled backend started and its dependencies imported — which is not the
+  same as grading a slide. OpenSlide reporting a version proves the DLL
+  loaded, not that its driver can open a slide and read tiles; importing torch
+  is not a forward pass. The test now generates a tiled TIFF, opens it through
+  OpenSlide, runs the model, and requires a valid ISUP grade group, confidence
+  and attention weights.
+
 ## [1.2.2] — 2026-08-27
 
 ### Added
@@ -157,6 +170,7 @@ smoke-test and publish the macOS and Windows installers.
 - Desktop packaging: Electron shell with a PyInstaller-bundled backend.
 - Audit trail, electronic signatures and role-based access.
 
+[1.2.3]: https://github.com/mishel-0/Omnia-AI/releases/tag/v1.2.3
 [1.2.2]: https://github.com/mishel-0/Omnia-AI/releases/tag/v1.2.2
 [1.2.1]: https://github.com/mishel-0/Omnia-AI/releases/tag/v1.2.1
 [1.2.0]: https://github.com/mishel-0/Omnia-AI/releases/tag/v1.2.0
