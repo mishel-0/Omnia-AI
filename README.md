@@ -311,7 +311,20 @@ TypeScript · Tailwind · Electron · PyInstaller · GitHub Actions.
 ### Download
 
 Installers are on the [latest release](https://github.com/mishel-0/Omnia-AI/releases/latest):
-macOS (Apple Silicon) `.dmg` and Windows 10/11 `.exe`. Both are built and verified by CI.
+macOS (Apple Silicon) `.dmg` and Windows 10/11 `.exe`.
+
+Both are built on their native platform and **verified by actually grading a slide**
+before the release publishes — CI opens a slide through OpenSlide, runs the model, and
+fails the build unless a valid grade, confidence and attention map come out. A build
+whose OpenSlide or model did not load never ships.
+
+| Platform | Backend starts | Slide opened | Model runs | Result |
+|---|---|---|---|---|
+| macOS 14 (arm64) | ✓ | ✓ | ✓ | grade group returned in 13.0 s |
+| Windows Server 2022 (x64) | ✓ | ✓ | ✓ | grade group returned in 2.0 s |
+
+Nothing is downloaded at runtime: the model, OpenSlide and PyTorch are all inside the
+installer, so a clinic with no internet access can install and grade.
 
 First launch takes ~45 s while the analysis engine unpacks; subsequent launches are quick.
 The app runs on a **60-day evaluation licence**, issued by the setup wizard on first run.
