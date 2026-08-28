@@ -45,7 +45,10 @@ jobs:
       # artifact storage quota — the thing that broke every prior release.
       - name: Grade a slide on macOS
         run: |
-          pip install tifffile
+          # Must run inside the venv build-desktop.sh created — the system
+          # interpreter has none of the packaged dependencies installed.
+          source .venv/bin/activate
+          pip install -q tifffile
           python3 tests/smoke_inference.py
 
       - name: Publish DMG to release
@@ -142,11 +145,13 @@ jobs:
       # its driver can open a slide and read tiles, and importing torch is not
       # a forward pass. This runs the real path end to end on Windows.
       - name: Grade a slide on Windows
-        shell: pwsh
+        shell: bash
         run: |
-          pip install tifffile
+          # Same venv as the packaged build; bash so the activate path matches
+          # what build-desktop.sh created.
+          source .venv/Scripts/activate
+          pip install -q tifffile
           python tests/smoke_inference.py
-          if ($LASTEXITCODE -ne 0) { throw "Inference failed on Windows" }
 
       - name: Validate installer
         shell: pwsh
