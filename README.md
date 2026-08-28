@@ -62,7 +62,7 @@ model that runs locally in ~42 s per slide on CPU.
 | **Fine-tuning that can't make things worse** | The model adapts to a site's own signed slides, and is promoted **only** if it beats the current model on a held-out split it never trained on. Verified in both directions |
 | **Identifiers that reject typos** | Generated patient IDs carry a Luhn mod-32 check character: **0 undetected single-character substitutions across 74,400 mutations** |
 | **Tested against its own dishonesty** | Of 132 integration tests, several exist purely to fail if fabricated data, simulated training, or unsupported efficacy claims ever return |
-| **Ships on two platforms, verified** | CI builds macOS and Windows installers and **runs the bundled backend** on a Windows runner, failing the build if OpenSlide, torch or the model didn't load |
+| **Ships on two platforms, verified** | CI builds macOS and Windows installers and **grades a slide on each** before publishing — opening a real slide through OpenSlide and running the model. A build whose OpenSlide or checkpoint didn't load never ships |
 
 ~6,500 lines of Python, ~7,900 of TypeScript, no cloud services, no telemetry.
 
