@@ -317,6 +317,58 @@
   animation: shutter-click 0.6s ease-out;
 }
 
+/* Indeterminate progress. Used where the app is genuinely working but cannot
+   measure how far along it is — analysis returns one result, with no
+   per-stage reporting to drive a percentage. A bar that sweeps says "working"
+   without claiming a completion figure nothing measured. */
+@keyframes indeterminate {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+.animate-indeterminate {
+  animation: indeterminate 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-indeterminate { animation-duration: 3s; }
+}
+
+/* Federated network — a small packet travelling along a fixed SVG path from
+   a site node into the central hub, and a second one travelling back out.
+   offset-distance drives motion along the path itself so the dot always
+   follows the drawn line exactly, at any viewport width. */
+@keyframes network-flow-out {
+  0%   { offset-distance: 0%;   opacity: 0; }
+  8%   { opacity: 1; }
+  92%  { opacity: 1; }
+  100% { offset-distance: 100%; opacity: 0; }
+}
+.animate-network-flow-out {
+  offset-path: path(var(--flow-path-out));
+  animation: network-flow-out 2.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes network-flow-in {
+  0%   { offset-distance: 0%;   opacity: 0; }
+  8%   { opacity: 1; }
+  92%  { opacity: 1; }
+  100% { offset-distance: 100%; opacity: 0; }
+}
+.animate-network-flow-in {
+  offset-path: path(var(--flow-path-in));
+  animation: network-flow-in 2.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes hub-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 122, 255, 0.35); }
+  50%      { box-shadow: 0 0 0 10px rgba(0, 122, 255, 0); }
+}
+.animate-hub-pulse {
+  animation: hub-pulse 2.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-network-flow-out, .animate-network-flow-in, .animate-hub-pulse {
+    animation: none;
+  }
+}
+
 /* Apple-style squircle corners utility */
 .rounded-squircle {
   border-radius: 24px;

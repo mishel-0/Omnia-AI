@@ -24,6 +24,10 @@
 /build/*
 !/build/dmg-background.png
 !/build/dmg-background@2x.png
+# package.json's mac config points electron-builder at this file. Excluded, the
+# repository could not produce a signed macOS build at all — the reference
+# would resolve to nothing on a fresh checkout.
+!/build/entitlements.mac.plist
 
 # misc
 .DS_Store
@@ -181,3 +185,9 @@ scratch_*.mjs
 # The shipped model is committed; models trained on a customer's own slides
 # are theirs and stay local.
 /data/models/
+
+# ── Claude Code local config ──
+# launch.json (dev preview server configs) routinely carries real secrets for
+# whatever's being tested locally — never appropriate to commit. settings.local.json
+# is per-developer by definition.
+/.claude/

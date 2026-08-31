@@ -44,6 +44,7 @@
     "dist",
     "out",
     ".next",
-    "desktop"
+    "desktop",
+    "omnia-network"
   ]
 }

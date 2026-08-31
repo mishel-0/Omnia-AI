@@ -113,35 +113,41 @@ function formatBytes(bytes: number): string {
   return `${bytes} B`;
 }
 
-/** Stages surfaced while a slide is being analysed. Naming the actual work makes
- * the wait legible to a pathologist instead of an unexplained spinner. */
-const ANALYSIS_STAGES = [
-  'Reading whole-slide image',
-  'Segmenting tissue regions',
-  'Detecting glandular architecture',
-  'Grading Gleason patterns',
-  'Assessing biomarkers',
-  'Compiling report',
-];
-const STAGE_MS = 600;
+/** Progress shown while a slide is being analysed.
+ *
+ * This was a six-step caption list ("Segmenting tissue regions", "Assessing
+ * biomarkers", …) advanced by a 600 ms timer, with a percentage derived from
+ * the timer's index and an artificial delay holding the result back so the
+ * captions had time to play. Two things were wrong with it. The percentage
+ * measured nothing — it was an animation wearing the costume of progress.
+ * And the captions described work the model does not do: grading is
+ * attention-MIL over sampled tiles, with no segmentation stage and no
+ * biomarker assessment to narrate.
+ *
+ * The backend does not stream per-stage progress, so the honest thing to
+ * show is that it is working and how long it has been. Elapsed time is a real
+ * number, and an indeterminate bar claims nothing it cannot support.
+ */
+function AnalyzingRow({ startedAt }: { startedAt: number }) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 500);
+    return () => clearInterval(id);
+  }, [startedAt]);
 
-/** Animated "thinking" row shown in place of the result while analysis runs. */
-function AnalyzingRow({ stage }: { stage: number }) {
-  const pct = Math.round(((stage + 1) / ANALYSIS_STAGES.length) * 100);
   return (
     <div className="max-w-[380px]">
       <div className="flex items-center gap-2">
         <Sparkles className="w-3.5 h-3.5 text-[#007AFF] animate-pulse shrink-0" />
-        <span key={stage} className="text-[12px] text-[#007AFF] animate-[stage-in_0.35s_ease-out]">
-          {ANALYSIS_STAGES[Math.min(stage, ANALYSIS_STAGES.length - 1)]}
-          <span className="analysis-dots" />
+        <span className="text-[12px] text-[#007AFF]">
+          Analysing slide<span className="analysis-dots" />
+        </span>
+        <span className="text-[11px] text-[var(--text-secondary)] tabular-nums ml-auto">
+          {elapsed}s
         </span>
       </div>
       <div className="mt-2 h-[3px] rounded-full bg-[var(--border-subtle)] overflow-hidden">
-        <div
-          className="h-full rounded-full bg-[#007AFF] transition-all duration-500 ease-out"
-          style={{ width: `${pct}%` }}
-        />
+        <div className="h-full w-1/3 rounded-full bg-[#007AFF] animate-indeterminate" />
       </div>
       <div className="mt-2 space-y-1.5">
         <div className="h-2 rounded-[3px] skeleton-shimmer w-[85%]" />
@@ -485,21 +491,14 @@ export default function TrialDetail() {
 
   const runAnalysis = async (patientId: string, slideId: string, filename: string) => {
     setAnalyzingIds((prev) => ({ ...prev, [slideId]: true }));
-    setAnalysisStage((prev) => ({ ...prev, [slideId]: 0 }));
+    // Records when this analysis actually started, so the row can show real
+    // elapsed time. There is no longer an artificial minimum delay: the
+    // previous version held a finished result back for
+    // STAGE_MS × stages so a caption animation could play out, which made
+    // every analysis slower than it needed to be for the sake of the
+    // animation.
+    setAnalysisStage((prev) => ({ ...prev, [slideId]: Date.now() }));
 
-    // Step the visible stage text so the wait reads as real work being done,
-    // rather than an opaque spinner.
-    const stageTimer = setInterval(() => {
-      setAnalysisStage((prev) => {
-        const at = prev[slideId] ?? 0;
-        if (at >= ANALYSIS_STAGES.length - 1) return prev;
-        return { ...prev, [slideId]: at + 1 };
-      });
-    }, STAGE_MS);
-
-    const minDelay = new Promise((resolve) =>
-      setTimeout(resolve, STAGE_MS * ANALYSIS_STAGES.length),
-    );
     try {
       // A 503 means the machine is saturated, not that the slide is bad —
       // the backend sends Retry-After for exactly this. Previously nothing
@@ -508,10 +507,10 @@ export default function TrialDetail() {
       const MAX_BUSY_RETRIES = 3;
       let res: Response | null = null;
       for (let attempt = 0; attempt <= MAX_BUSY_RETRIES; attempt++) {
-        const [r] = await Promise.all([
-          apiFetch(`/api/trials/patients/${patientId}/slides/${slideId}/analyze`, { method: 'POST' }),
-          attempt === 0 ? minDelay : Promise.resolve(),
-        ]);
+        const r = await apiFetch(
+          `/api/trials/patients/${patientId}/slides/${slideId}/analyze`,
+          { method: 'POST' },
+        );
         if (r.status !== 503 || attempt === MAX_BUSY_RETRIES) { res = r; break; }
         const retryAfter = Number(r.headers.get('Retry-After')) || 30;
         toast.show(
@@ -545,7 +544,6 @@ export default function TrialDetail() {
       console.error('Failed to analyze slide', e);
       toast.show(e instanceof Error ? e.message : `AI analysis failed for ${filename}`, 'error');
     } finally {
-      clearInterval(stageTimer);
       setAnalyzingIds((prev) => {
         const next = { ...prev };
         delete next[slideId];
@@ -957,7 +955,7 @@ export default function TrialDetail() {
                           <td className="px-3 py-2 text-[12px] text-[var(--text-secondary)]">
                             <span className="inline-flex items-center gap-1.5">
                               {analyzing ? (
-                                <AnalyzingRow stage={analysisStage[slide.id] ?? 0} />
+                                <AnalyzingRow startedAt={analysisStage[slide.id] ?? Date.now()} />
                               ) : slide.confirmed ? (
                                 `Confirmed: ${slide.doctor_correction || slide.grade || 'N/A'}`
                               ) : slide.grade ? (

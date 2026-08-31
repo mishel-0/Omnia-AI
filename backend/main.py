@@ -15,7 +15,7 @@ load_dotenv(os.path.join(_root, ".env"))
 logger = logging.getLogger("omnia-pathology")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import traceback
@@ -25,12 +25,27 @@ from datetime import datetime, timezone
 
 app = FastAPI(title="Omnia AI — Pathology Clinical Trial Suite", version=__version__)
 
+# The app's own frontend is the only legitimate browser origin. With
+# allow_origins=["*"] Starlette echoes back whatever Origin it is given, so
+# any web page the user happened to have open could call the endpoints that
+# do not require a session — including /api/users/bootstrap, which creates
+# an admin account while none exists. Naming the origins removes that.
+#
+# OMNIA_CORS_ORIGINS (comma-separated) covers running the frontend on a
+# non-default port during development.
+_default_origins = "http://localhost:3000,http://127.0.0.1:3000"
+_origins = [
+    o.strip()
+    for o in os.environ.get("OMNIA_CORS_ORIGINS", _default_origins).split(",")
+    if o.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
 # ─── Health ───
@@ -43,7 +58,18 @@ async def health():
     backend look dead. Running on the event loop keeps it answerable
     regardless of what the analysis workers are doing. Keep it free of any
     blocking work for the same reason."""
-    return {"status": "ok", "service": "omnia-pathology", "version": __version__, "time": datetime.now(timezone.utc).isoformat()}
+    from backend import testmode
+
+    payload = {"status": "ok", "service": "omnia-pathology", "version": __version__,
+               "time": datetime.now(timezone.utc).isoformat()}
+    # Reported on the liveness probe specifically because that is the one
+    # endpoint everything already calls. A build that fabricates grades
+    # should never be able to look ordinary to anything checking on it.
+    fabricated = testmode.warning()
+    if fabricated:
+        payload["grading_fabricated"] = True
+        payload["warning"] = fabricated
+    return payload
 
 @app.get("/api/system/workers")
 def system_workers():
@@ -69,8 +95,14 @@ def run_worker(name: str):
 
 
 @app.get("/api/system/preflight")
-def preflight():
+def preflight(authorization: str | None = Header(None)):
     """Real environment checks, run at install time.
+
+    Open only while the installation has no account yet — the setup wizard
+    genuinely cannot authenticate, because the first user does not exist. Once
+    setup is complete this needs a session: the reply carries absolute
+    filesystem paths and a per-dependency map of the machine, which is
+    reconnaissance rather than something an anonymous caller needs.
 
     This replaced a fixed-duration progress animation that claimed to
     "verify package integrity" and "register file associations" while doing
@@ -80,11 +112,24 @@ def preflight():
     is a genuine reason the app will not grade slides on this machine.
     """
     import shutil
+    from backend.users import any_users_exist
+    from backend.deps import get_optional_user
+
+    if any_users_exist() and not get_optional_user(authorization):
+        raise HTTPException(401, "Not authenticated")
+
     checks = []
 
     def add(key, label, ok, detail, fatal=False):
         checks.append({"key": key, "label": label, "ok": bool(ok),
                        "detail": detail, "fatal": bool(fatal)})
+
+    # Fabricated grading, first and fatal. If this is on, nothing else in
+    # this list matters: the model is not being run at all.
+    from backend import testmode
+    if testmode.warning():
+        add("grading_mode", "Grading uses the real model", False,
+            "TEST MODE — grades are fabricated, not produced by the model", fatal=True)
 
     # Writable data directory — without it nothing can be saved at all.
     try:
@@ -225,7 +270,27 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     reload = os.environ.get("OMNIA_DEV_RELOAD") == "true"
+
+    # Loopback only. This process serves patient data and, before the first
+    # account exists, an unauthenticated endpoint that creates an admin
+    # (/api/users/bootstrap) — binding 0.0.0.0 published both to every
+    # interface on the machine, so any device on a hospital LAN or guest
+    # Wi-Fi could reach them. Nothing needs off-machine access: Electron
+    # health-checks 127.0.0.1, the frontend calls localhost, and the
+    # bundled Next.js server is already pinned to 127.0.0.1.
+    #
+    # OMNIA_BIND_HOST exists for containerised deployments where the
+    # process must answer outside its own network namespace. Setting it is
+    # a deliberate act that exposes the API, and the startup banner says so.
+    host = os.environ.get("OMNIA_BIND_HOST", "127.0.0.1")
+    if host != "127.0.0.1":
+        logger.warning(
+            "Binding to %s, not loopback. The API — including unauthenticated "
+            "setup while no account exists — is reachable from other machines. "
+            "Ensure something in front of it restricts access.", host,
+        )
+
     if reload:
-        uvicorn.run("backend.main:app", host="0.0.0.0", port=port, reload=True)
+        uvicorn.run("backend.main:app", host=host, port=port, reload=True)
     else:
-        uvicorn.run(app, host="0.0.0.0", port=port)
+        uvicorn.run(app, host=host, port=port)

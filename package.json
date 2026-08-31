@@ -53,7 +53,12 @@
           "from": "dist/omnia-backend",
           "to": "backend"
         }
-      ]
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": true
     },
     "win": {
       "target": [
@@ -65,7 +70,11 @@
           "from": "dist/omnia-backend.exe",
           "to": "backend.exe"
         }
-      ]
+      ],
+      "signingHashAlgorithms": [
+        "sha256"
+      ],
+      "publisherName": "Omnia Pathology AI"
     },
     "dmg": {
       "icon": "desktop/icon.icns",
@@ -89,7 +98,8 @@
           "type": "link",
           "path": "/Applications"
         }
-      ]
+      ],
+      "writeUpdateInfo": false
     },
     "nsis": {
       "oneClick": false,

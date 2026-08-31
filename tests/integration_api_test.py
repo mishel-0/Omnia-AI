@@ -525,7 +525,15 @@ check("Q1 API version matches package.json",
       s == 200 and _h.get("version") == _pkg_version,
       f"api={_h.get('version') if s == 200 else s} package.json={_pkg_version}")
 
-s, _pf = req("GET", "/api/system/preflight")
+# Preflight is open only during setup, before the first account exists. By
+# this point the suite has created users, so it needs a session — and the
+# fact that it does is itself worth asserting: the reply carries absolute
+# filesystem paths and a per-dependency map of the machine.
+s, _ = req("GET", "/api/system/preflight")
+check("Q1b preflight is not readable anonymously once setup is complete",
+      s == 401, f"expected 401 for an unauthenticated caller, got {s}")
+
+s, _pf = req("GET", "/api/system/preflight", token=ADMIN)
 check("Q2 preflight runs real environment checks",
       s == 200 and len(_pf.get("checks", [])) >= 5, f"got {s}")
 check("Q3 preflight reports readiness", s == 200 and "ready" in _pf, f"got {s}")
@@ -701,9 +709,42 @@ check("T7 agreement metric is defined for degenerate input",
       "QWK crashes or misreports on degenerate input")
 
 # A fine-tune must never be promoted unless it beat the current model.
-check("T8 promotion is gated on measured improvement",
-      "improved = best[\"qwk\"] > base_qwk" in open(_ft.__file__).read(),
-      "promotion is no longer gated on a held-out comparison")
+#
+# This used to grep finetune.py for the literal line `improved = best["qwk"]
+# > base_qwk`. That passes for any file containing the right characters and
+# fails for any correct refactor — including the one that fixed the gate's
+# real defect, where the epoch was chosen on the same slides that then judged
+# it. Assert the behaviour instead: labels with no learnable signal cannot
+# produce a genuine improvement, so the run must be rejected.
+def _no_signal_run():
+    import numpy as np
+    from unittest.mock import patch
+    rng = np.random.RandomState(7)
+    labels = [int(rng.randint(0, 6)) for _ in range(30)]
+    feats = {f"/noise/{i}.svs": rng.randn(32, 1280).astype(np.float32) for i in range(30)}
+    examples = [{"filepath": f"/noise/{i}.svs", "grade_group": g} for i, g in enumerate(labels)]
+    with patch.object(_ft, "extract_features", side_effect=lambda p, force=False: feats[p]):
+        return _ft.run_finetune(examples, epochs=3)
+
+try:
+    _r8 = _no_signal_run()
+    check("T8 promotion is gated on measured improvement",
+          (_r8["finetuned_qwk"] > _r8["baseline_qwk"]) == _r8["improved"]
+          and _r8["promoted"] == _r8["improved"],
+          f"promotion did not follow the measured comparison: {_r8.get('baseline_qwk')} -> "
+          f"{_r8.get('finetuned_qwk')}, improved={_r8.get('improved')}, "
+          f"promoted={_r8.get('promoted')}")
+
+    # The number the gate reports must come from slides that took no part in
+    # choosing which epoch to keep — otherwise it is the maximum over epochs
+    # on its own measuring stick, which is biased upward and will promote noise.
+    check("T8b the promotion figure is measured on slides used for nothing else",
+          "selection_qwk" in _r8
+          and _r8["train_size"] + _r8["select_size"] + _r8["val_size"] == _r8["examples_used"],
+          "training, selection and held-out slides do not partition the dataset")
+except Exception as _e8:
+    check("T8 promotion is gated on measured improvement", False, f"run failed: {_e8}")
+    check("T8b the promotion figure is measured on slides used for nothing else", False, "not reached")
 
 # Corrections are training labels; free text cannot be one.
 from backend.trials import grade_group_from_text as _g
@@ -722,6 +763,62 @@ s, _ = req("POST", "/api/training/start")
 check("T12 starting training requires auth", s == 401, f"expected 401, got {s}")
 s, _ = req("POST", "/api/training/model/revert", token=MONITOR)
 check("T13 a monitor cannot change the active model", s == 403, f"expected 403, got {s}")
+
+print("\n=== W. SIGNED REPORT CORRECTNESS ===")
+
+# The PDF is the document that leaves the building — it is what a sponsor, a
+# monitor or a regulator actually reads. Every check here is a defect that
+# shipped: each one rendered a signed clinical document that was wrong on its
+# face rather than failing loudly.
+import io as _io, re as _re, datetime as _dt
+from backend.pathology_report import generate_pathology_pdf as _pdf
+from backend.version import __version__ as _ver
+
+def _pdf_text(b):
+    from pypdf import PdfReader
+    return "\n".join(p.extract_text() for p in PdfReader(_io.BytesIO(b)).pages)
+
+# ISUP grade group 0 means benign. Testing it for truthiness treated it as
+# absent, so a benign slide printed "Grade Group: —" beside "Gleason: Benign".
+_benign = _pdf_text(_pdf(ai_grade="Benign", grade_group=0, ai_confidence=0.0,
+                         regions_analyzed=0, processing_time_s=0.0, confirmed=True))
+_bl = _benign.splitlines()
+_gg = _bl[_bl.index("WHO/ISUP Grade") + 2].strip() if "WHO/ISUP Grade" in _bl else "?"
+check("W1 a benign slide reports grade group 0, not 'not assessed'",
+      _gg == "0", f"grade group rendered as {_gg!r}")
+check("W2 a genuine 0% confidence is reported, not blanked",
+      "0.0%" in _benign, "zero confidence rendered as '—'")
+
+# The model's confidence belongs to the model's prediction. Printed under a
+# doctor-corrected grade it attributed a model number to a human judgement —
+# the confidence of the very prediction the pathologist had overruled.
+_corr = _pdf_text(_pdf(ai_grade="3+4=7", doctor_correction="4+5=9", grade_group=5,
+                       ai_confidence=0.823, confirmed=True))
+check("W3 a corrected grade does not carry the overruled model's confidence",
+      "Model confidence: 82%" not in _corr and "Corrected by the reporting pathologist" in _corr,
+      "model confidence is still shown beneath a doctor-corrected grade")
+
+# A signed report has to say which software produced it, and when, truthfully.
+_foot = [l for l in _pdf_text(_pdf(ai_grade="4+5=9", grade_group=5, patient_id="P1",
+                                   analysis_date="2026-01-01", confirmed=True)).splitlines()
+         if "Omnia AI v" in l]
+check("W4 the report states the version that actually produced it",
+      bool(_foot) and f"v{_ver}" in _foot[0], f"footer says {_foot[0].strip() if _foot else '(missing)'}")
+check("W5 a timestamp labelled UTC is actually UTC",
+      bool(_foot) and _dt.datetime.now(_dt.timezone.utc).strftime("%H:") in _foot[0],
+      "the UTC-labelled timestamp is local time")
+
+# "An issued report can be produced again unchanged" — which a random report
+# ID made untrue.
+_args = dict(ai_grade="4+5=9", grade_group=5, patient_id="P1",
+             analysis_date="2026-01-01", confirmed=True)
+_rid = lambda b: (_re.search(r"Report ID: ([0-9A-F]+)", _pdf_text(b)) or [None, None])[1]
+check("W6 reissuing the same report yields the same report ID",
+      _rid(_pdf(**_args)) == _rid(_pdf(**_args)) is not None,
+      "the report ID changes on every regeneration")
+check("W7 different patients do not share a report ID",
+      _rid(_pdf(**_args)) != _rid(_pdf(**{**_args, "patient_id": "P2"})),
+      "two patients produced the same report ID")
 
 print("\n=== U. BACKGROUND WORKERS & SELF-REPAIR ===")
 

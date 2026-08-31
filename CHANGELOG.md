@@ -15,6 +15,118 @@ smoke-test and publish the macOS and Windows installers.
 
 ---
 
+## [Unreleased]
+
+### Security
+
+- **The backend no longer publishes itself to the local network.** It bound
+  `0.0.0.0`, so a hospital LAN or guest Wi‑Fi could reach the clinical API —
+  verified against a shipped build from another address on the network. Nothing
+  needs off-machine access: the desktop shell health-checks `127.0.0.1` and the
+  bundled frontend was already pinned to loopback. It now binds `127.0.0.1`
+  unless `OMNIA_BIND_HOST` is set deliberately, which logs a warning. This
+  also closed the window in which `POST /api/users/bootstrap` — unauthenticated
+  by necessity, since it creates the *first* account — was reachable by anyone
+  on the network before the pathologist finished setup.
+- **CORS no longer accepts every origin.** `allow_origins=["*"]` with
+  credentials meant any web page the user had open could call the endpoints
+  that do not require a session. Restricted to the app's own frontend.
+- **`/api/system/preflight` requires a session once setup is complete.** It
+  returns absolute filesystem paths and a per-dependency map of the machine. It
+  stays open only while no account exists, because the setup wizard genuinely
+  cannot authenticate.
+- **`OMNIA_TEST_FAKE_GRADING` is refused in a packaged build.** The flag makes
+  grading return a fixed result without running the model, for the test suite.
+  It was honoured identically in the clinical build and surfaced nowhere — a
+  fabricated grade reached a signed PDF indistinguishable from a real one. It
+  is now ignored in a frozen build, and where it is honoured it is reported by
+  `/health`, fails preflight as fatal, and is logged.
+- **Session tokens are stored hashed, not in the clear.** Read access to the
+  data directory was previously direct account access. Expired sessions are
+  also pruned on every write instead of only when re-presented, which had let
+  `sessions.json` grow for the life of an installation. Existing sessions are
+  invalidated once by this change; users sign in again.
+
+### Fixed
+
+- **A fine-tune could be promoted on noise.** The held-out set chose which
+  epoch to keep *and* then judged whether that epoch beat the current model.
+  Taking the best of a dozen epochs on as few as six slides and reporting that
+  maximum as held-out agreement measures the luckiest epoch, not the model.
+  Epoch selection now uses a split carved out of the training data, and the
+  held-out set is scored exactly twice — once for the baseline, once for the
+  finished model — so the promotion figure is an estimate of the model rather
+  than of the selection. The optimistic selection score is still recorded, as
+  `selection_qwk`, so the gap between the two is visible.
+- **A benign slide's report said its grade group was not assessed.** ISUP grade
+  group 0 was tested for truthiness, so the one grade group that is legitimately
+  zero rendered as "—" beside "Gleason Grade: Benign" on the same signed page.
+  A genuine 0% confidence, 0 regions analysed and 0.0 s processing time were
+  blanked the same way.
+- **A doctor-corrected grade carried the model's confidence.** The report
+  printed "Doctor-Corrected Grade" above the confidence of the prediction the
+  pathologist had just overruled, reading as though the correction itself were
+  82% confident.
+- **Signed reports misstated their own provenance.** The footer hardcoded
+  "Omnia AI v1.0" while the application was 1.2.3, and labelled a local
+  timestamp as UTC — hours out on any machine east of Greenwich. Both now come
+  from the real source. The report ID was `os.urandom(4)`, so reissuing a stored
+  report produced a different identifier every time, contradicting the guarantee
+  that an issued report can be produced again unchanged; it is now derived from
+  the report's own identifying content.
+- **Quitting left the backend and frontend running.** The `SIGKILL` escalation
+  was scheduled with `setTimeout`, which Electron never waits for on quit, so
+  the escalation was dead code and the leaked servers it existed to prevent
+  kept happening — which is what made the *next* launch report a port conflict.
+  Shutdown now waits for the children and signals the whole process group, so
+  the PyInstaller bootstrap's own child is included.
+- **Startup could force-kill unrelated software.** Port reclamation matched
+  process names against `/omnia|next-server|node/i` and `SIGKILL`ed anything
+  that matched on ports 3000 or 8000 — the default port for most local
+  development servers — with no prompt and no visible message. Ownership is now
+  established by PIDs recorded when the children are spawned.
+- **A corrupt data file could fill the disk.** The quarantine copied the file
+  and left the unreadable original in place, so every subsequent read
+  quarantined it again under a new timestamp. With the dashboard polling, that
+  is a fresh full copy roughly every second until the disk fills.
+- **Accounts and sessions were the only data written without the store lock.**
+  Every other stateful module used `transaction()`; `users.py` did not, so a
+  login racing the session cleanup could be 401'd immediately after signing in
+  successfully, and simultaneous registrations could drop a user record.
+- Feature cache keys now include the feature extractor's identity. Cached tile
+  embeddings are only reusable by the network that produced them, and shipping
+  a retrained backbone would otherwise have silently reused the old ones.
+- `write_json` fsyncs the directory as well as the file, so the rename is as
+  durable as the contents — which is what this module claims to provide.
+- The health check no longer leaks its abort timer on the failure path, which
+  is the path taken continuously while the backend is down.
+- "Try Again" on the port-conflict dialog no longer re-enters startup without
+  bound.
+
+### Changed
+
+- **Analysis progress reports elapsed time instead of a fabricated
+  percentage.** The bar was driven by a 600 ms timer, not by the backend, and
+  its captions ("Segmenting tissue regions", "Assessing biomarkers") described
+  work the model does not do — grading is attention-MIL over sampled tiles. A
+  minimum delay also held finished results back so the captions could play. The
+  row now shows an indeterminate bar and the real elapsed seconds, and results
+  appear as soon as they exist.
+- Release publishing moved to a single job that runs after both platforms
+  build. The macOS and Windows jobs each created the same GitHub release in
+  parallel, which raced; worse, a Windows failure still left the macOS
+  installer published on its own.
+- Removed `OMNIA_MODEL_PATH`, which pointed every launch at
+  `aria_model_dicom.pth` — a checkpoint from the retired DICOM product, read by
+  nothing.
+
+### Internal
+
+- Integration suite grown to **141 tests**, including seven that read a
+  generated PDF back and assert on what it renders. The promotion-gate guard
+  now tests the behaviour rather than grepping `finetune.py` for a literal line
+  of source, which failed for the refactor that fixed the gate's real defect.
+
 ## [1.2.3] — 2026-08-28
 
 ### Added

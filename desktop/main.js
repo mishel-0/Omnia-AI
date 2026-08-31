@@ -96,10 +96,12 @@ function getFrontendServerPath() {
   return path.join(__dirname, '..', '.next', 'standalone', 'server.js');
 }
 
-function getModelPath(backendExePath) {
-  // Model is bundled inside PyInstaller binary via --add-data
-  return path.join(path.dirname(backendExePath), 'aria_model_dicom.pth');
-}
+// getModelPath() used to live here and set OMNIA_MODEL_PATH to
+// `aria_model_dicom.pth` — a checkpoint from the retired DICOM product that
+// has not existed since this became a pathology tool. It was harmless only
+// because the backend never read the variable: grading_model.py resolves its
+// checkpoint from sys._MEIPASS. Both halves are gone rather than left to
+// mislead the next reader.
 
 // ── Service management ──────────────────────────────────────────────────
 function startBackend() {
@@ -116,10 +118,12 @@ function startBackend() {
   backendProcess = spawn(backendPath, [], {
     cwd: path.dirname(backendPath),
     stdio: ['pipe', 'pipe', 'pipe'],
+    // Own process group, so shutdown can signal the PyInstaller bootstrap
+    // parent *and* the real server it re-executes. See killTree().
+    detached: process.platform !== 'win32',
     env: {
       ...process.env,
       PYTHONUNBUFFERED: '1',
-      OMNIA_MODEL_PATH: getModelPath(backendPath),
       OMNIA_DATA_DIR: dataDir,
     },
   });
@@ -157,6 +161,7 @@ function startFrontendServer() {
   frontendServer = fork(serverPath, [], {
     cwd: frontendDir,
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+    detached: process.platform !== 'win32',
     env,
   });
   frontendServer.stdout.on('data', (d) => console.log(`[Frontend] ${d.toString().trim()}`));
@@ -271,47 +276,68 @@ function isRunningFromDiskImage() {
   return app.isPackaged && app.getAppPath().startsWith('/Volumes/');
 }
 
-/** Reclaim ports held by servers this app leaked on a previous run.
+/** Reclaim ports held by servers *this app* leaked on a previous run.
  *
  * The startup guard treats any busy port as a third-party conflict and
  * quits with "close other applications" — advice the user cannot act on
  * when the process holding the port is Omnia's own orphaned backend or
- * frontend. Identify the owner and, if it is ours, stop it. Anything we
- * do not recognise is left alone and reported honestly. */
-function portOwners(port) {
+ * frontend.
+ *
+ * Ownership is established by PID, recorded when we spawn the children,
+ * not by matching the process name. Name matching was actively dangerous:
+ * the pattern included `node`, and port 3000 is the default for most local
+ * development servers, so launching Omnia would SIGKILL an unrelated
+ * Next/React/Rails process — someone else's unsaved work — with no prompt
+ * and no visible message. A PID we wrote down ourselves is the only thing
+ * that actually proves the process is ours. */
+const PID_FILE = path.join(app.getPath('userData'), 'child-pids.json');
+
+function recordChildPids() {
   try {
-    const out = execFileSync('/usr/sbin/lsof',
-      ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-F', 'pc'],
-      { encoding: 'utf8', timeout: 4000 });
-    const owners = [];
-    let pid = null;
-    for (const line of out.split('\n')) {
-      if (line.startsWith('p')) pid = parseInt(line.slice(1), 10);
-      else if (line.startsWith('c') && pid) owners.push({ pid, command: line.slice(1) });
-    }
-    return owners;
-  } catch { return []; }   // lsof missing or nothing listening
+    const pids = {
+      backend: backendProcess ? backendProcess.pid : null,
+      frontend: frontendServer ? frontendServer.pid : null,
+      recorded: Date.now(),
+    };
+    fs.mkdirSync(path.dirname(PID_FILE), { recursive: true });
+    fs.writeFileSync(PID_FILE, JSON.stringify(pids));
+  } catch (e) {
+    console.error('[Omnia] Could not record child PIDs:', e.message);
+  }
+}
+
+function readRecordedPids() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(PID_FILE, 'utf8'));
+    return [raw.backend, raw.frontend].filter((p) => Number.isInteger(p) && p > 0);
+  } catch { return []; }   // no previous run, or the file is unreadable
 }
 
 async function reclaimOwnPorts() {
-  const OURS = /omnia|next-server|node/i;
   let reclaimed = false;
-  for (const port of [BACKEND_PORT, FRONTEND_PORT]) {
-    for (const { pid, command } of portOwners(port)) {
-      if (pid === process.pid || !OURS.test(command)) continue;
-      try {
-        process.kill(pid, 'SIGKILL');
-        console.log(`[Omnia] Reclaimed port ${port} from leftover process ${pid} (${command})`);
-        reclaimed = true;
-      } catch (e) {
-        console.error(`[Omnia] Could not stop process ${pid} on port ${port}: ${e.message}`);
-      }
+  for (const pid of readRecordedPids()) {
+    if (pid === process.pid) continue;
+    try {
+      process.kill(pid, 0);           // still alive? throws if not
+    } catch { continue; }             // already gone — nothing to reclaim
+    try {
+      process.kill(pid, 'SIGKILL');
+      console.log(`[Omnia] Stopped leftover child process ${pid} from a previous run`);
+      reclaimed = true;
+    } catch (e) {
+      console.error(`[Omnia] Could not stop leftover process ${pid}: ${e.message}`);
     }
   }
+  try { fs.unlinkSync(PID_FILE); } catch { /* nothing to clear */ }
   if (reclaimed) await new Promise((r) => setTimeout(r, 800));  // let the sockets close
 }
 
-async function startApp() {
+// "Try Again" on the port dialog used to call startApp() from inside its own
+// await, so frames stacked for as long as the user kept pressing. A loop with
+// a bound does the same job without growing, and gives the retry an end.
+const MAX_PORT_RETRIES = 5;
+
+async function startApp(attempt = 0) {
   if (isRunningFromDiskImage()) {
     dialog.showErrorBox(
       'Please Install Omnia Pathology AI First',
@@ -338,22 +364,32 @@ async function startApp() {
     const ports = [];
     if (backendBusy) ports.push(`port ${BACKEND_PORT} (backend)`);
     if (frontendBusy) ports.push(`port ${FRONTEND_PORT} (frontend)`);
+    const exhausted = attempt >= MAX_PORT_RETRIES;
     const { response } = await dialog.showMessageBox({
       type: 'warning',
       title: 'Port In Use',
       message: `Another application is using ${ports.join(' and ')}.`,
-      detail: 'Omnia Pathology AI needs these ports for its local engine. Close the other application, then choose Try Again.',
-      buttons: ['Try Again', 'Quit'],
+      detail: exhausted
+        ? 'Omnia Pathology AI needs these ports for its local engine, and they are '
+          + 'still in use after several attempts. Restart this computer, or close the '
+          + 'application holding them, then open Omnia again.'
+        : 'Omnia Pathology AI needs these ports for its local engine. Close the other '
+          + 'application, then choose Try Again.',
+      buttons: exhausted ? ['Quit'] : ['Try Again', 'Quit'],
       defaultId: 0,
-      cancelId: 1,
+      cancelId: exhausted ? 0 : 1,
     });
-    if (response === 0) { startApp(); return; }   // let the user recover
+    if (!exhausted && response === 0) { await startApp(attempt + 1); return; }
     app.quit();
     return;
   }
 
   startBackend();
   startFrontendServer();
+  // Written before the health checks, not after: if startup fails or the
+  // user force-quits during it, these are exactly the processes the next
+  // launch needs to be able to identify as ours and reclaim.
+  recordChildPids();
 
   const [backendOk, frontendOk] = await Promise.all([waitForBackend(), waitForFrontend()]);
 
@@ -385,21 +421,73 @@ app.whenReady().then(() => {
  * the server holding its port. Leaked servers are not harmless — the next
  * launch finds ports 3000/8000 occupied and refuses to start. */
 let shuttingDown = false;
+
+/** Kill one child and everything it spawned.
+ *
+ * The bundled backend is a PyInstaller onefile binary: a bootstrap parent
+ * that re-executes the real server as a child. Signalling only the parent
+ * leaves the server alive and still holding port 8000, which is the leak
+ * that makes the *next* launch fail. Children are spawned detached so they
+ * lead their own process group, and a negative PID signals the whole group.
+ * Windows has no process groups, so taskkill /T does the same job there. */
+function killTree(pid, signal) {
+  if (!pid) return;
+  if (process.platform === 'win32') {
+    try {
+      execFileSync('taskkill', ['/pid', String(pid), '/T', '/F'], { timeout: 4000 });
+    } catch { /* already gone, or taskkill unavailable */ }
+    return;
+  }
+  try { process.kill(-pid, signal); }     // whole group
+  catch {
+    try { process.kill(pid, signal); }    // fall back to the bare process
+    catch { /* already gone */ }
+  }
+}
+
+function isAlive(pid) {
+  if (!pid) return false;
+  try { process.kill(pid, 0); return true; } catch { return false; }
+}
+
+/** Stop both children, and do not return until they are actually dead.
+ *
+ * The previous version scheduled the SIGKILL escalation with setTimeout, so
+ * it never ran: Electron tears the process down on quit without waiting for
+ * pending timers, and `process.on('exit')` cannot await anything either. The
+ * escalation this function exists for was dead code, and the leaked servers
+ * it was written to prevent kept happening. The wait is synchronous for that
+ * reason — a spin here costs at most SIGKILL_AFTER_MS on quit, and buys a
+ * launch that is not blocked by our own orphans. */
+const SIGKILL_AFTER_MS = 2000;
+
 function stopServers() {
   if (shuttingDown) return;
   shuttingDown = true;
-  for (const [name, proc] of [['frontend', frontendServer], ['backend', backendProcess]]) {
-    if (!proc || proc.killed) continue;
-    try {
-      proc.kill('SIGTERM');
-      const pid = proc.pid;
-      setTimeout(() => {
-        try { process.kill(pid, 0); process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
-      }, 2000);
-    } catch (e) {
-      console.error(`[Omnia] Failed to stop ${name}:`, e.message);
+
+  const pids = [
+    ['frontend', frontendServer && frontendServer.pid],
+    ['backend', backendProcess && backendProcess.pid],
+  ].filter(([, pid]) => pid);
+
+  for (const [, pid] of pids) killTree(pid, 'SIGTERM');
+
+  // Give them a moment to exit cleanly, then insist. Atomics.wait blocks
+  // this thread without spawning anything or burning CPU — the one way to
+  // sleep synchronously in Node, which is what quit-time requires.
+  const deadline = Date.now() + SIGKILL_AFTER_MS;
+  const idle = new Int32Array(new SharedArrayBuffer(4));
+  while (Date.now() < deadline && pids.some(([, pid]) => isAlive(pid))) {
+    Atomics.wait(idle, 0, 0, 100);
+  }
+  for (const [name, pid] of pids) {
+    if (isAlive(pid)) {
+      console.log(`[Omnia] ${name} (${pid}) ignored SIGTERM — forcing.`);
+      killTree(pid, 'SIGKILL');
     }
   }
+
+  try { fs.unlinkSync(PID_FILE); } catch { /* nothing recorded */ }
   frontendServer = null;
   backendProcess = null;
 }

@@ -45,9 +45,16 @@ ACTIVE_POINTER = MODEL_DIR / "active.json"
 # Below this, a held-out split is too small to say anything about whether the
 # fine-tune helped, so there is nothing to gate promotion on.
 MIN_EXAMPLES = 20
-# Fraction held out for validation. With small datasets a larger share buys
-# a more trustworthy comparison, which is the whole point of the gate.
+# Fraction held out to decide whether the fine-tune actually improved
+# grading. These slides are scored twice — once for the current model, once
+# for the finished fine-tune — and take no part in training or in choosing
+# which epoch to keep. With small datasets a larger share buys a more
+# trustworthy comparison, which is the whole point of the gate.
 VAL_FRACTION = 0.3
+# Fraction of the remaining (training) slides used to choose which epoch to
+# keep. Carved out of training data specifically so that decision never
+# touches the held-out set above.
+SELECT_FRACTION = 0.25
 N_CLASSES = 6
 
 
@@ -87,14 +94,27 @@ def quadratic_weighted_kappa(actual, predicted, n_classes: int = N_CLASSES) -> f
 
 # ─── Feature extraction ───
 
+# Bumped whenever the backbone that produces tile features changes.
+#
+# Cached embeddings are only reusable by the network that produced them. The
+# key used to cover the slide alone, which is safe today purely because
+# fine-tuning freezes the backbone — a coincidence of the current design, not
+# a guarantee. Ship a retrained backbone without changing this and every
+# install silently reuses embeddings from the old network: no error, no
+# warning, and fine-tuning quietly optimises heads against features that no
+# longer correspond to the model doing the grading.
+FEATURE_EXTRACTOR_VERSION = "effnet-b0/omnia_prostate_v1"
+
+
 def _cache_key(filepath: str) -> str:
-    """Key on path plus size and mtime, so a replaced file is re-extracted."""
+    """Key on the extractor plus path, size and mtime, so both a replaced
+    slide and a changed backbone force re-extraction."""
     try:
         st = os.stat(filepath)
         stamp = f"{filepath}:{st.st_size}:{int(st.st_mtime)}"
     except OSError:
         stamp = filepath
-    return hashlib.sha256(stamp.encode()).hexdigest()[:32]
+    return hashlib.sha256(f"{FEATURE_EXTRACTOR_VERSION}:{stamp}".encode()).hexdigest()[:32]
 
 
 def extract_features(filepath: str, force: bool = False) -> np.ndarray:
@@ -246,20 +266,47 @@ def run_finetune(
     # Stratify so both halves contain the same grade mix where possible; a
     # random split on a small, skewed set can put every high-grade slide on
     # one side and make the comparison meaningless.
-    order = _stratified_split(labels, VAL_FRACTION, rng)
-    train_idx, val_idx = order
-    if len(val_idx) == 0 or len(train_idx) == 0:
+    # Three-way, and the reason matters.
+    #
+    # This used to be a two-way split, and the held-out half did two jobs: it
+    # chose which epoch to keep (the best of `epochs` by agreement), and it
+    # then judged whether that kept epoch beat the current model. Those cannot
+    # be the same slides. Taking the maximum over a dozen epochs on a handful
+    # of cases and then reporting that maximum as held-out agreement is not an
+    # estimate of the model — it is an estimate of the luckiest epoch, and it
+    # is biased upward by exactly the amount that made it the maximum. At the
+    # floor of MIN_EXAMPLES that meant best-of-12 on six slides, which will
+    # regularly clear the gate on noise alone and promote a model that is not
+    # actually better.
+    #
+    # So: `test` is touched exactly twice — once for the baseline, once for
+    # the final comparison — and never influences which epoch is kept.
+    # `select` is carved out of the training data and does the epoch choosing.
+    rest_idx, test_idx = _stratified_split(labels, VAL_FRACTION, rng)
+    if len(test_idx) == 0 or len(rest_idx) == 0:
         raise FineTuneError("Not enough variety in the reviewed slides to hold out a fair test set.")
 
-    Xtr, ytr = X[train_idx], y[train_idx]
-    Xva, yva = X[val_idx], y[val_idx]
+    rest_labels = [labels[i] for i in rest_idx]
+    inner_train, inner_select = _stratified_split(rest_labels, SELECT_FRACTION, rng)
+    train_idx = [rest_idx[i] for i in inner_train]
+    select_idx = [rest_idx[i] for i in inner_select]
 
-    # ── Baseline: how the CURRENT model scores on this same held-out set ──
+    # With few examples the inner split can come back empty. Selecting on the
+    # training data itself is a weaker signal than a clean split, but it is
+    # still honest — the promotion decision below is unaffected either way.
+    if not select_idx or not train_idx:
+        train_idx, select_idx = list(rest_idx), list(rest_idx)
+
+    Xtr, ytr = X[train_idx], y[train_idx]
+    Xsel, ysel = X[select_idx], y[select_idx]
+    Xte, yte = X[test_idx], y[test_idx]
+
+    # ── Baseline: how the CURRENT model scores on the untouched test set ──
     base_state = _load_active_state()
     baseline_heads, _ = _build_heads(base_state)
     thresholds = np.array(gm.GRADE_THRESHOLDS)
-    base_pred = _predict_groups(baseline_heads, Xva, thresholds)
-    base_qwk = quadratic_weighted_kappa(yva.numpy(), base_pred)
+    base_pred = _predict_groups(baseline_heads, Xte, thresholds)
+    base_qwk = quadratic_weighted_kappa(yte.numpy(), base_pred)
     emit(
         stage="baseline",
         progress=0.4,
@@ -295,16 +342,18 @@ def run_finetune(
             epoch_loss += float(loss.item())
             batches += 1
 
-        val_pred = _predict_groups(heads, Xva, thresholds)
-        val_qwk = quadratic_weighted_kappa(yva.numpy(), val_pred)
+        sel_pred = _predict_groups(heads, Xsel, thresholds)
+        sel_qwk = quadratic_weighted_kappa(ysel.numpy(), sel_pred)
         mean_loss = epoch_loss / max(batches, 1)
-        history.append({"epoch": epoch, "loss": round(mean_loss, 4), "qwk": round(val_qwk, 4)})
+        history.append({"epoch": epoch, "loss": round(mean_loss, 4), "qwk": round(sel_qwk, 4)})
 
-        # Keep the best epoch by held-out agreement, not the last one — later
-        # epochs on a small set usually overfit.
-        if val_qwk > best["qwk"]:
+        # Keep the best epoch by agreement on the *selection* split, not the
+        # last one — later epochs on a small set usually overfit. The test set
+        # deliberately plays no part here; it has to stay unseen for the
+        # promotion decision below to mean anything.
+        if sel_qwk > best["qwk"]:
             best = {
-                "qwk": val_qwk,
+                "qwk": sel_qwk,
                 "state": {k: v.detach().clone() for k, v in heads.state_dict().items()},
                 "epoch": epoch,
             }
@@ -314,18 +363,36 @@ def run_finetune(
             epoch=epoch,
             progress=round(0.4 + 0.55 * epoch / epochs, 4),
             loss=round(mean_loss, 4),
-            qwk=round(val_qwk, 4),
-            message=f"Epoch {epoch} of {epochs} — agreement {val_qwk:.4f}",
+            qwk=round(sel_qwk, 4),
+            message=f"Epoch {epoch} of {epochs} — agreement {sel_qwk:.4f}",
             history=list(history),
         )
 
-    improved = best["qwk"] > base_qwk
+    # ── The promotion decision, on slides used for nothing until now ──
+    # Score the epoch that was kept, on the test set. This number is the only
+    # honest estimate in the run: the model is fixed before it is measured,
+    # and these slides took no part in choosing it.
+    if best["state"] is not None:
+        final_heads, _ = _build_heads(base_state)
+        final_heads.load_state_dict(best["state"])
+        test_pred = _predict_groups(final_heads, Xte, thresholds)
+        test_qwk = quadratic_weighted_kappa(yte.numpy(), test_pred)
+    else:
+        test_qwk = base_qwk
+
+    improved = test_qwk > base_qwk
     summary = {
         "examples_used": len(feats),
         "train_size": len(train_idx),
-        "val_size": len(val_idx),
+        "select_size": len(select_idx),
+        "val_size": len(test_idx),
         "baseline_qwk": round(base_qwk, 4),
-        "finetuned_qwk": round(best["qwk"], 4),
+        "finetuned_qwk": round(test_qwk, 4),
+        # Kept separate on purpose: this is the figure the epoch was chosen
+        # by, and it is optimistic for that reason. Recording both makes the
+        # gap between them visible instead of letting the optimistic one be
+        # mistaken for the result.
+        "selection_qwk": round(best["qwk"], 4),
         "best_epoch": best["epoch"],
         "improved": bool(improved),
         "history": history,
@@ -337,11 +404,11 @@ def run_finetune(
         summary["checkpoint"] = str(path)
         summary["promoted"] = True
         emit(stage="promoting", progress=1.0,
-             message=f"Agreement improved {base_qwk:.4f} → {best['qwk']:.4f}. New model is now active.")
+             message=f"Agreement improved {base_qwk:.4f} → {test_qwk:.4f}. New model is now active.")
     else:
         summary["promoted"] = False
         emit(stage="rejected", progress=1.0,
-             message=(f"Agreement did not improve ({base_qwk:.4f} → {best['qwk']:.4f}). "
+             message=(f"Agreement did not improve ({base_qwk:.4f} → {test_qwk:.4f}). "
                       "The existing model has been kept."))
 
     return summary
@@ -387,7 +454,12 @@ def _save_finetuned(head_state: dict, base_state: Optional[dict], summary: dict)
     """Write a complete checkpoint: the frozen backbone plus the new heads.
 
     A head-only file would not be loadable by the inference path, which
-    expects a full state dict.
+    expects a full state dict. A second, head-only file is written alongside
+    it purely so that anything exporting this run for the federated network
+    (see network_export.py) reads a file that was always head-only, rather
+    than reconstructing one by diffing the merged checkpoint against the
+    shipped backbone — the backbone must never even transiently need to be
+    reasoned about at export time.
     """
     import torch
 
@@ -402,7 +474,12 @@ def _save_finetuned(head_state: dict, base_state: Optional[dict], summary: dict)
                 "created": datetime.datetime.now().isoformat()}, tmp)
     tmp.replace(path)
 
-    _write_active(path, summary)
+    head_path = MODEL_DIR / f"omnia_prostate_finetuned_{stamp}.head.pt"
+    head_tmp = head_path.with_suffix(".head.pt.part")
+    torch.save(head_state, head_tmp)
+    head_tmp.replace(head_path)
+
+    _write_active(path, summary, head_path)
 
     # Make the promoted model take effect immediately. Otherwise the run
     # reports success while inference continues on the previous weights.
@@ -416,11 +493,12 @@ def _save_finetuned(head_state: dict, base_state: Optional[dict], summary: dict)
     return path
 
 
-def _write_active(path: Path, summary: dict):
+def _write_active(path: Path, summary: dict, head_path: Optional[Path] = None):
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     tmp = ACTIVE_POINTER.with_suffix(".json.part")
     tmp.write_text(json.dumps({
         "path": str(path),
+        "head_path": str(head_path) if head_path else None,
         "qwk": summary.get("finetuned_qwk"),
         "baseline_qwk": summary.get("baseline_qwk"),
         "examples_used": summary.get("examples_used"),
@@ -437,6 +515,23 @@ def active_model_path() -> Optional[str]:
         return None
     path = info.get("path")
     return path if path and Path(path).exists() else None
+
+
+def active_head_info() -> Optional[dict]:
+    """Head-only checkpoint path and training stats for the active fine-tune,
+    or None if the shipped model is active (nothing local to contribute)."""
+    try:
+        info = json.loads(ACTIVE_POINTER.read_text())
+    except (OSError, ValueError):
+        return None
+    head_path = info.get("head_path")
+    if not head_path or not Path(head_path).exists():
+        return None
+    return {
+        "head_path": head_path,
+        "local_val_qwk": info.get("qwk"),
+        "sample_count": info.get("examples_used"),
+    }
 
 
 def active_model_info() -> dict:

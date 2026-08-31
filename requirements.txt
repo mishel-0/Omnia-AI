@@ -4,6 +4,8 @@ python-dotenv>=1.0.0
 python-multipart>=0.0.9
 reportlab>=4.0.0
 uvicorn[standard]>=0.22.0
+# Uploading a fine-tuned head to the Omnia network (backend/routes/training.py)
+requests>=2.31.0
 
 # Prostate grading model (backend/grading_model.py)
 torch>=2.0.0
@@ -30,3 +32,9 @@ rdkit>=2024.3.1
 # open, so a packaged build can be proven to actually grade a slide on each
 # platform without committing a large .svs to the repository.
 tifffile>=2024.1.0
+
+# Test-only: the signed-report tests read the generated PDF back and assert on
+# what it actually renders. Reviewing the code that builds the document is not
+# the same as checking the document — an ISUP grade group of 0 vanishing, or a
+# timestamp labelled UTC that is not UTC, are visible only in the output.
+pypdf>=4.0.0

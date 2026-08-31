@@ -83,18 +83,23 @@ export function BackendConnection({ children }: { children: ReactNode }) {
     let timerId: ReturnType<typeof setTimeout>;
 
     const check = async (): Promise<boolean> => {
+      const controller = new AbortController();
+      // Cleared in `finally`, not after the await. On the throw path — which
+      // is the path taken the whole time the backend is down, and so the one
+      // this polls hardest — the timer was being left pending to fire
+      // abort() at a controller that had already settled.
+      const timeout = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
       try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
         const res = await fetch(`${API_BASE}/health`, {
           method: 'GET',
           cache: 'no-store',
           signal: controller.signal,
         });
-        clearTimeout(timeout);
         return res.ok;
       } catch {
         return false;
+      } finally {
+        clearTimeout(timeout);
       }
     };
 

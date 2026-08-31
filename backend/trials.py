@@ -375,7 +375,9 @@ def _assert_readable_slide(path: str):
     trial/patient management must keep working on a machine where slide
     support isn't available.
     """
-    if os.environ.get("OMNIA_TEST_FAKE_GRADING") == "1":
+    from backend import testmode
+
+    if testmode.active():
         return  # test fixtures upload dummy bytes on purpose; see grading_model.predict
     try:
         import openslide

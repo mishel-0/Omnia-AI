@@ -10,6 +10,7 @@ import { Card, Button, Pill, TableSkeleton } from '@/components/ui';
 import { apiFetch, apiSend, useAuth, canWrite } from '@/lib/auth';
 import { useToast } from '@/lib/toast';
 import { useDialogs } from '@/lib/dialogs';
+import NetworkPanel from './NetworkPanel';
 
 interface Hardware {
   os: string; arch: string; cpu_name: string;
@@ -354,6 +355,10 @@ export default function TrainingPage() {
             </div>
           </div>
         </Card>
+
+        {/* Federated network — send this device's fine-tune to be merged
+            with other sites' corrections, never their raw data. */}
+        <NetworkPanel />
 
         {/* Hardware */}
         <Card size="sm" className="p-5">
