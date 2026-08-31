@@ -6,12 +6,12 @@ import {
   Hospital,
   Activity,
   AlertTriangle,
-  Server,
   Lock,
-  ExternalLink,
   ChevronRight,
 } from 'lucide-react';
-import { NavRoute, ServerHealth } from '../types';
+import {
+   NavRoute, ServerHealth ,
+} from '../types';
 
 interface SidebarProps {
   currentRoute: NavRoute;

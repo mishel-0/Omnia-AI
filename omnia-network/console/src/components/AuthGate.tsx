@@ -1,6 +1,15 @@
-import React, { useState } from 'react';
-import { Lock, ShieldCheck, ArrowRight, Activity, Terminal, KeyRound } from 'lucide-react';
-import { getActiveBaseUrl, setAdminToken, verifyAdminToken } from '../services/api';
+import React, {
+  useState,
+} from 'react';
+import {
+  ShieldCheck,
+  ArrowRight,
+  Activity,
+  KeyRound,
+} from 'lucide-react';
+import {
+   getActiveBaseUrl, setAdminToken, verifyAdminToken ,
+} from '../services/api';
 
 interface AuthGateProps {
   onAuthenticated: () => void;

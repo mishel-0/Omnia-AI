@@ -1,4 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, {
+  useState,
+  useMemo,
+} from 'react';
 import {
   GitMerge,
   ChevronDown,
@@ -6,17 +9,13 @@ import {
   Copy,
   Check,
   Search,
-  ArrowUpDown,
   ShieldCheck,
-  Hospital,
-  Layers,
-  Calendar,
-  Sparkles,
-  Info,
-  ExternalLink,
 } from 'lucide-react';
-import { Release, ContributionInRelease } from '../types';
 import {
+  Release,
+} from '../types';
+import {
+  
   formatNumber,
   formatDate,
   formatRelativeTime,

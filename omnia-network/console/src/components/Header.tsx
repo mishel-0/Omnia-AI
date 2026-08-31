@@ -1,14 +1,13 @@
 import React from 'react';
 import {
   RotateCw,
-  AlertTriangle,
-  Server,
   Settings,
   ShieldAlert,
-  HelpCircle,
   ExternalLink,
 } from 'lucide-react';
-import { NavRoute, ServerHealth } from '../types';
+import {
+   NavRoute, ServerHealth ,
+} from '../types';
 
 interface HeaderProps {
   currentRoute: NavRoute;

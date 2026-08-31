@@ -1,26 +1,22 @@
-import React, { useState } from 'react';
+import React, {
+  useState,
+} from 'react';
 import {
-  Activity,
   Server,
   ShieldAlert,
   ShieldCheck,
-  AlertTriangle,
   RotateCw,
   CheckCircle2,
   XCircle,
-  ExternalLink,
   Settings,
   Terminal,
-  Key,
-  Globe,
   Radio,
-  Lock,
-  Zap,
 } from 'lucide-react';
-import { ServerHealth } from '../types';
+import {
+  ServerHealth,
+} from '../types';
 import {
   API_BASE_URL,
-  getActiveBaseUrl,
   setActiveBaseUrl,
 } from '../services/api';
 

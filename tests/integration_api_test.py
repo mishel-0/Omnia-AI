@@ -770,7 +770,9 @@ print("\n=== W. SIGNED REPORT CORRECTNESS ===")
 # monitor or a regulator actually reads. Every check here is a defect that
 # shipped: each one rendered a signed clinical document that was wrong on its
 # face rather than failing loudly.
-import io as _io, re as _re, datetime as _dt
+import io as _io
+import re as _re
+import datetime as _dt
 from backend.pathology_report import generate_pathology_pdf as _pdf
 from backend.version import __version__ as _ver
 
@@ -799,9 +801,9 @@ check("W3 a corrected grade does not carry the overruled model's confidence",
       "model confidence is still shown beneath a doctor-corrected grade")
 
 # A signed report has to say which software produced it, and when, truthfully.
-_foot = [l for l in _pdf_text(_pdf(ai_grade="4+5=9", grade_group=5, patient_id="P1",
-                                   analysis_date="2026-01-01", confirmed=True)).splitlines()
-         if "Omnia AI v" in l]
+_foot = [line for line in _pdf_text(_pdf(ai_grade="4+5=9", grade_group=5, patient_id="P1",
+                                         analysis_date="2026-01-01", confirmed=True)).splitlines()
+         if "Omnia AI v" in line]
 check("W4 the report states the version that actually produced it",
       bool(_foot) and f"v{_ver}" in _foot[0], f"footer says {_foot[0].strip() if _foot else '(missing)'}")
 check("W5 a timestamp labelled UTC is actually UTC",
@@ -812,7 +814,10 @@ check("W5 a timestamp labelled UTC is actually UTC",
 # ID made untrue.
 _args = dict(ai_grade="4+5=9", grade_group=5, patient_id="P1",
              analysis_date="2026-01-01", confirmed=True)
-_rid = lambda b: (_re.search(r"Report ID: ([0-9A-F]+)", _pdf_text(b)) or [None, None])[1]
+def _rid(pdf_bytes):
+    """The Report ID a generated PDF renders, or None if it carries none."""
+    m = _re.search(r"Report ID: ([0-9A-F]+)", _pdf_text(pdf_bytes))
+    return m.group(1) if m else None
 check("W6 reissuing the same report yields the same report ID",
       _rid(_pdf(**_args)) == _rid(_pdf(**_args)) is not None,
       "the report ID changes on every regeneration")

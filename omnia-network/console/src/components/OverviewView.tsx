@@ -1,19 +1,15 @@
-import React, { useState } from 'react';
+import React, {
+  useState,
+} from 'react';
 import {
   Hospital,
   Layers,
   GitMerge,
   Clock,
   ArrowUpRight,
-  TrendingUp,
-  AlertTriangle,
   CheckCircle2,
   ShieldCheck,
-  Zap,
   BarChart3,
-  LineChart as LineChartIcon,
-  RefreshCw,
-  Info,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -26,13 +22,16 @@ import {
   CartesianGrid,
   Legend,
 } from 'recharts';
-import { PendingContribution, Release, Site } from '../types';
+import {
+  PendingContribution,
+  Release,
+  Site,
+} from '../types';
 import {
   formatNumber,
   formatDate,
   formatRelativeTime,
   getDaysSince,
-  formatBytes,
   formatQwk,
   truncateHash,
 } from '../utils/format';

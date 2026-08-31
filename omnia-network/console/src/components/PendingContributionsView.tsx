@@ -1,4 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, {
+  useState,
+  useMemo,
+} from 'react';
 import {
   Layers,
   GitMerge,
@@ -10,15 +13,14 @@ import {
   ArrowUpDown,
   Copy,
   Check,
-  Info,
-  Clock,
-  ShieldAlert,
   AlertCircle,
-  HelpCircle,
   Sparkles,
 } from 'lucide-react';
-import { PendingContribution, Release } from '../types';
 import {
+   PendingContribution, Release ,
+} from '../types';
+import {
+  
   formatNumber,
   formatBytes,
   formatQwk,

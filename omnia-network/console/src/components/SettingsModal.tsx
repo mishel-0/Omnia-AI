@@ -1,6 +1,16 @@
-import React, { useState } from 'react';
-import { Settings, X, Globe, Radio, CheckCircle2, XCircle } from 'lucide-react';
-import { API_BASE_URL } from '../services/api';
+import React, {
+  useState,
+} from 'react';
+import {
+  Settings,
+  X,
+  Radio,
+  CheckCircle2,
+  XCircle,
+} from 'lucide-react';
+import {
+   API_BASE_URL ,
+} from '../services/api';
 
 interface SettingsModalProps {
   isOpen: boolean;
