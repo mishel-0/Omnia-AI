@@ -131,7 +131,7 @@ export default function Home() {
             })();
             router.push(backendStatus === 'offline' || !setupDone ? '/install' : '/dashboard');
           }}
-          className="w-full bg-[var(--accent)] hover:bg-[#0066CC] text-white font-semibold py-[16px] px-8 rounded-[14px] shadow-lg shadow-[var(--accent-soft)] active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 text-[17px] tracking-[-0.3px]"
+          className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-contrast)] font-semibold py-[16px] px-8 rounded-[14px] shadow-lg shadow-[var(--accent-soft)] active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 text-[17px] tracking-[-0.3px]"
         >
           {backendStatus === 'offline' ? 'Install Diagnostics Engine' : 'Continue'}
           <ArrowRight className="w-[20px] h-[20px]" />

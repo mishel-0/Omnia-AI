@@ -185,8 +185,8 @@ export function Button({
 }
 
 /** Shimmering placeholder block for content that's still loading. */
-export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn('skeleton-shimmer rounded-[6px]', className)} />;
+export function Skeleton({ className, ...rest }: React.HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn('skeleton-shimmer rounded-[6px]', className)} {...rest} />;
 }
 
 /** Skeleton rows shaped like a data table, shown while the real rows load. */
@@ -201,6 +201,64 @@ export function TableSkeleton({ rows = 5, columns = 5 }: { rows?: number; column
         </div>
       ))}
     </div>
+  );
+}
+
+/** A placeholder shaped like the card it is standing in for.
+ *
+ * A spinner says "wait" and nothing else. A placeholder that matches the
+ * layout about to appear tells the reader where things will be, and stops the
+ * page jumping when data lands — the loading state and the loaded state occupy
+ * the same space. The shimmer is the only motion, and it is what makes this
+ * read as loading rather than as an empty card.
+ */
+export function CardSkeleton({ lines = 3, className }: { lines?: number; className?: string }) {
+  return (
+    <Card size="sm" className={cn('p-5', className)}>
+      <div className="flex items-center gap-2.5 mb-4">
+        <Skeleton className="w-8 h-8 rounded-[10px]" />
+        <Skeleton className="h-3 w-28" />
+      </div>
+      <Skeleton className="h-7 w-20 mb-3" />
+      <div className="space-y-2">
+        {Array.from({ length: lines }).map((_, i) => (
+          <Skeleton
+            key={i}
+            className="h-2.5"
+            // Uneven widths read as text; equal bars read as a broken table.
+            style={{ width: `${[92, 74, 58, 66][i % 4]}%` }}
+          />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+/** A grid of card placeholders, for a section that loads as a set. */
+export function CardGridSkeleton({ count = 3, lines = 3 }: { count?: number; lines?: number }) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {Array.from({ length: count }).map((_, i) => (
+        <CardSkeleton key={i} lines={lines} />
+      ))}
+    </div>
+  );
+}
+
+/** Small inline spinner for a button or a row — the one place a spinner is
+ *  right, because there is no layout to stand in for. */
+export function Spinner({ size = 14, className }: { size?: number; className?: string }) {
+  return (
+    <span
+      className={cn('inline-block rounded-full border-2 animate-spin align-[-2px]', className)}
+      style={{
+        width: size, height: size,
+        borderColor: 'var(--border-medium)',
+        borderTopColor: 'var(--accent)',
+        animationDuration: '0.7s',
+      }}
+      aria-hidden="true"
+    />
   );
 }
 

@@ -39,6 +39,9 @@
     --accent-soft: rgba(14, 165, 233, 0.10);
     --accent-border: rgba(14, 165, 233, 0.28);
     --accent-contrast: #FFFFFF; /* text placed on top of --accent */
+
+    --card-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 12px rgba(16, 24, 40, 0.04);
+    --card-shadow-raised: 0 2px 4px rgba(16, 24, 40, 0.06), 0 12px 28px rgba(16, 24, 40, 0.10);
   }
 
   /* ── Theme: Dark ── */
@@ -72,6 +75,11 @@
     --accent-soft: rgba(56, 189, 248, 0.14);
     --accent-border: rgba(56, 189, 248, 0.32);
     --accent-contrast: #04263A; /* dark text on a bright accent fill */
+
+    /* Depth on a dark ground comes from the border, not the shadow — a black
+       shadow on near-black is not visible at all. */
+    --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.36);
+    --card-shadow-raised: 0 4px 16px rgba(0, 0, 0, 0.48);
   }
 
   body {
@@ -131,11 +139,38 @@
   }
 
   /* Apple Health Card Styles */
+  /* The card surface.
+     A hairline border plus a soft shadow, rather than shadow alone: on a dark
+     ground a shadow is invisible, so a borderless card dissolved into the page
+     and the whole layout lost its structure in dark mode. The border carries
+     the edge, the shadow carries the lift, and each theme sets its own. */
   .health-card {
     background: var(--bg-card-solid);
     border-radius: 20px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
-    border: none;
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--card-shadow);
+  }
+
+  /* Only for cards that are actually a control — a link, a button, a row you
+     open. Applying lift to every card makes a static page feel unstable. */
+  .health-card-interactive {
+    transition: box-shadow 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+  }
+  .health-card-interactive:hover {
+    border-color: var(--border-medium);
+    box-shadow: var(--card-shadow-raised);
+    transform: translateY(-1px);
+  }
+  .health-card-interactive:active {
+    transform: translateY(0);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .health-card-interactive,
+    .health-card-interactive:hover,
+    .health-card-interactive:active {
+      transition: none;
+      transform: none;
+    }
   }
 
   .health-card-lg {
