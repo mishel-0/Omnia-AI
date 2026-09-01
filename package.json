@@ -71,10 +71,12 @@
           "to": "backend.exe"
         }
       ],
-      "signingHashAlgorithms": [
-        "sha256"
-      ],
-      "publisherName": "Omnia Pathology AI"
+      "signtoolOptions": {
+        "signingHashAlgorithms": [
+          "sha256"
+        ],
+        "publisherName": "Omnia Pathology AI"
+      }
     },
     "dmg": {
       "icon": "desktop/icon.icns",
@@ -139,5 +141,7 @@
     "onlyBuiltDependencies": [
       "unrs-resolver"
     ]
-  }
+  },
+  "description": "Offline AI pathology suite for prostate biopsy grading in clinical trials.",
+  "author": "Omnia Pathology AI"
 }
