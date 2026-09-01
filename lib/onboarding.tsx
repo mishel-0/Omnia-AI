@@ -172,8 +172,8 @@ function GuideOverlay({
             </>
           ) : (
             <>
-              <div className="w-[46px] h-[46px] rounded-[12px] bg-[#007AFF]/10 flex items-center justify-center mb-4">
-                <current.icon className="w-[22px] h-[22px] text-[#007AFF]" />
+              <div className="w-[46px] h-[46px] rounded-[12px] bg-[var(--accent-soft)] flex items-center justify-center mb-4">
+                <current.icon className="w-[22px] h-[22px] text-[var(--accent)]" />
               </div>
               <h2 className="text-[19px] font-semibold tracking-[-0.2px]">{current.title}</h2>
               <p className="text-[13px] text-[var(--text-secondary)] mt-2 leading-relaxed">{current.body}</p>
@@ -194,7 +194,7 @@ function GuideOverlay({
                 className="rounded-full transition-all"
                 style={{
                   width: i === step ? 18 : 6, height: 6,
-                  background: i === step ? '#007AFF' : 'var(--border-medium)',
+                  background: i === step ? 'var(--accent)' : 'var(--border-medium)',
                 }}
               />
             ))}
@@ -297,8 +297,8 @@ export function InfoHint({ term, className }: { term: string; className?: string
         className={
           'inline-flex items-center justify-center w-[13px] h-[13px] rounded-full border transition-colors ' +
           (openState
-            ? 'border-[#007AFF] bg-[#007AFF] text-white'
-            : 'border-[var(--border-medium)] text-[var(--text-secondary)] hover:border-[#007AFF] hover:text-[#007AFF]') +
+            ? 'border-[var(--accent)] bg-[var(--accent)] text-white'
+            : 'border-[var(--border-medium)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]') +
           ' text-[9px] font-semibold cursor-pointer select-none'
         }
       >
@@ -309,7 +309,7 @@ export function InfoHint({ term, className }: { term: string; className?: string
           onClick={(e) => e.stopPropagation()}
           className="absolute z-[250] top-[calc(100%+6px)] left-1/2 -translate-x-1/2 w-[220px] rounded-[10px] bg-[var(--bg-card-solid)] border border-[var(--border-medium)] shadow-xl px-3 py-2.5 text-left"
         >
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-[#007AFF] mb-1">{term}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--accent)] mb-1">{term}</p>
           <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed normal-case font-normal">{text}</p>
         </div>
       )}
@@ -344,8 +344,8 @@ function HelpLauncher({
           onClick={onOpen}
           title="Help & Guides"
           aria-label="Open help center"
-          className="fixed bottom-6 right-6 z-[220] w-12 h-12 rounded-full bg-[#007AFF] text-white shadow-xl flex items-center justify-center hover:bg-[#0066D6] transition-colors hover:scale-105 active:scale-95"
-          style={{ boxShadow: '0 8px 24px rgba(0, 122, 255, 0.35)' }}
+          className="fixed bottom-6 right-6 z-[220] w-12 h-12 rounded-full bg-[var(--accent)] text-white shadow-xl flex items-center justify-center hover:bg-[#0066D6] transition-colors hover:scale-105 active:scale-95"
+          style={{ boxShadow: '0 8px 24px var(--accent-border)' }}
         >
           <HelpCircle className="w-6 h-6" />
         </button>
@@ -360,7 +360,7 @@ function HelpLauncher({
           >
             <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border-subtle)] shrink-0">
               <div className="flex items-center gap-2">
-                <HelpCircle className="w-4 h-4 text-[#007AFF]" />
+                <HelpCircle className="w-4 h-4 text-[var(--accent)]" />
                 <h2 className="text-[14px] font-semibold">Help &amp; Guides</h2>
               </div>
               <button onClick={onClose} className="p-1 rounded-[6px] hover:bg-[var(--skeleton-bg)]">
@@ -371,14 +371,14 @@ function HelpLauncher({
             <div className="px-5 pt-4 pb-2 shrink-0">
               <button
                 onClick={() => { onClose(); onReplayGuide(); }}
-                className="w-full flex items-center gap-3 px-3.5 py-3 rounded-[12px] bg-[#007AFF]/8 hover:bg-[#007AFF]/12 transition-colors text-left mb-3"
+                className="w-full flex items-center gap-3 px-3.5 py-3 rounded-[12px] bg-[var(--accent-soft)] hover:bg-[var(--accent-soft)] transition-colors text-left mb-3"
               >
-                <BookOpen className="w-4 h-4 text-[#007AFF] shrink-0" />
+                <BookOpen className="w-4 h-4 text-[var(--accent)] shrink-0" />
                 <span className="flex-1">
-                  <span className="block text-[12.5px] font-semibold text-[#007AFF]">Replay the full guided tour</span>
+                  <span className="block text-[12.5px] font-semibold text-[var(--accent)]">Replay the full guided tour</span>
                   <span className="block text-[10.5px] text-[var(--text-secondary)]">The 8-step walkthrough, start to export</span>
                 </span>
-                <ArrowRight className="w-3.5 h-3.5 text-[#007AFF] shrink-0" />
+                <ArrowRight className="w-3.5 h-3.5 text-[var(--accent)] shrink-0" />
               </button>
 
               <div className="relative">
@@ -388,7 +388,7 @@ function HelpLauncher({
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search guides and terms…"
-                  className="w-full pl-9 pr-3 py-2 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[12.5px] focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                  className="w-full pl-9 pr-3 py-2 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[12.5px] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
                 />
               </div>
             </div>
@@ -472,7 +472,7 @@ export function TrustDisclosure({ signed }: { signed?: boolean }) {
       {expanded && (
         <div className="px-3.5 pb-3.5 pt-0.5 space-y-2.5">
           <div className="flex items-start gap-2.5">
-            <Microscope className="w-3.5 h-3.5 text-[#007AFF] shrink-0 mt-0.5" />
+            <Microscope className="w-3.5 h-3.5 text-[var(--accent)] shrink-0 mt-0.5" />
             <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
               The grade comes from an <strong className="text-[var(--text-primary)]">attention-based
               deep learning model</strong> trained on the PANDA prostate biopsy dataset. It samples
@@ -490,7 +490,7 @@ export function TrustDisclosure({ signed }: { signed?: boolean }) {
             </p>
           </div>
           <div className="flex items-start gap-2.5">
-            <Info className="w-3.5 h-3.5 text-[#007AFF] shrink-0 mt-0.5" />
+            <Info className="w-3.5 h-3.5 text-[var(--accent)] shrink-0 mt-0.5" />
             <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
               The <strong className="text-[var(--text-primary)]">confidence score</strong> reflects how
               certain the model is in its own output, not how advanced the disease is. Treat a low

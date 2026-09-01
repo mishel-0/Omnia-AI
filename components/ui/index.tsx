@@ -10,7 +10,7 @@ export const ACCENT = {
   yellow: { bg: '#FFCC00', tint: 'rgba(255, 204, 0, 0.14)' },
   green: { bg: '#34C759', tint: 'rgba(52, 199, 89, 0.12)' },
   teal: { bg: '#30B0C7', tint: 'rgba(48, 176, 199, 0.12)' },
-  blue: { bg: '#007AFF', tint: 'rgba(0, 122, 255, 0.12)' },
+  blue: { bg: 'var(--accent)', tint: 'var(--accent-soft)' },
   indigo: { bg: '#5856D6', tint: 'rgba(88, 86, 214, 0.12)' },
   purple: { bg: '#AF52DE', tint: 'rgba(175, 82, 222, 0.12)' },
   pink: { bg: '#FF2D55', tint: 'rgba(255, 45, 85, 0.12)' },
@@ -168,7 +168,11 @@ export function Button({
     lg: 'text-[16px] px-6 py-3.5 rounded-[14px]',
   };
   const variants = {
-    primary: 'bg-[#007AFF] hover:bg-[#0066CC] text-white shadow-sm shadow-[#007AFF]/20',
+    // Text colour comes from a token, not a literal `text-white`. The accent is
+    // a deep sky blue on light and a bright one on dark; white on the bright
+    // variant is roughly 2:1 and fails contrast, so each theme supplies the
+    // label colour that actually reads on its own accent.
+    primary: 'bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-contrast)] shadow-sm shadow-[var(--accent-soft)]',
     secondary: 'bg-[var(--skeleton-bg)] hover:bg-[var(--border-medium)] text-[var(--text-primary)]',
     danger: 'bg-[#FF3B30]/10 hover:bg-[#FF3B30]/15 text-[#FF3B30]',
     ghost: 'bg-transparent hover:bg-[var(--skeleton-bg)] text-[var(--text-secondary)]',

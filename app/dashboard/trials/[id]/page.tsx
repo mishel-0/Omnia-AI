@@ -14,6 +14,7 @@ import { InfoHint, TrustDisclosure } from '@/lib/onboarding';
 import { SubjectTimeline } from './SubjectTimeline';
 import { CohortInsights } from './CohortInsights';
 import { DrugProfile } from './DrugProfile';
+import BatchPanel from './BatchPanel';
 
 interface Biomarker { result: string; interpretation: string; }
 /** One sampled tile and how strongly the model's attention layer weighted it
@@ -138,8 +139,8 @@ function AnalyzingRow({ startedAt }: { startedAt: number }) {
   return (
     <div className="max-w-[380px]">
       <div className="flex items-center gap-2">
-        <Sparkles className="w-3.5 h-3.5 text-[#007AFF] animate-pulse shrink-0" />
-        <span className="text-[12px] text-[#007AFF]">
+        <Sparkles className="w-3.5 h-3.5 text-[var(--accent)] animate-pulse shrink-0" />
+        <span className="text-[12px] text-[var(--accent)]">
           Analysing slide<span className="analysis-dots" />
         </span>
         <span className="text-[11px] text-[var(--text-secondary)] tabular-nums ml-auto">
@@ -147,7 +148,7 @@ function AnalyzingRow({ startedAt }: { startedAt: number }) {
         </span>
       </div>
       <div className="mt-2 h-[3px] rounded-full bg-[var(--border-subtle)] overflow-hidden">
-        <div className="h-full w-1/3 rounded-full bg-[#007AFF] animate-indeterminate" />
+        <div className="h-full w-1/3 rounded-full bg-[var(--accent)] animate-indeterminate" />
       </div>
       <div className="mt-2 space-y-1.5">
         <div className="h-2 rounded-[3px] skeleton-shimmer w-[85%]" />
@@ -819,6 +820,13 @@ export default function TrialDetail() {
       {/* Patient List */}
       <div className="max-w-5xl mx-auto px-6 py-6">
         <DrugProfile trialId={trialId} writable={writable} />
+        {/* Only where there is something to analyse and someone allowed to
+            start it — a monitor or sponsor cannot queue work. */}
+        {patients.length > 0 && writable && (
+          <div className="mb-5">
+            <BatchPanel trialId={trialId} onFinished={loadData} />
+          </div>
+        )}
         {patients.length > 0 && <CohortInsights trialId={trialId} />}
         {patients.length === 0 ? (
           <EmptyState icon={FileText} title="No patients yet" subtitle={writable ? 'Add your first patient to begin.' : 'No patients have been added yet.'} />
@@ -868,7 +876,7 @@ export default function TrialDetail() {
                       <MessageSquareWarning className="w-3 h-3" /> Flag Query
                     </button>
                     {writable && (
-                      <label className="cursor-pointer inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] text-[11px] font-semibold bg-[#007AFF]/10 text-[#007AFF] hover:bg-[#007AFF]/15 transition-colors">
+                      <label className="cursor-pointer inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] text-[11px] font-semibold bg-[var(--accent-soft)] text-[var(--accent)] hover:bg-[var(--accent-soft)] transition-colors">
                         <Upload className="w-3 h-3" />
                         Upload .svs
                         <input type="file" accept=".svs" multiple className="hidden" onChange={(e) => e.target.files && handleDrop(patient.id, e.target.files)} />
@@ -980,7 +988,7 @@ export default function TrialDetail() {
                               {hasAI && (
                                 <button
                                   title={isExpanded ? 'Hide the full AI pathology report' : 'View the full AI pathology report'}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] text-[11px] font-semibold bg-[#007AFF]/10 text-[#007AFF] hover:bg-[#007AFF]/15 transition-colors whitespace-nowrap"
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] text-[11px] font-semibold bg-[var(--accent-soft)] text-[var(--accent)] hover:bg-[var(--accent-soft)] transition-colors whitespace-nowrap"
                                   onClick={() => setExpandedSlides({ ...expandedSlides, [slide.id]: !isExpanded })}
                                 >
                                   <Sparkles className="w-3 h-3" />
@@ -1083,7 +1091,7 @@ export default function TrialDetail() {
                                   <p className="text-[9px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] mb-1">Confidence</p>
                                   <div className="flex items-center gap-2">
                                     <div className="h-1.5 flex-1 rounded-full bg-[var(--border-subtle)] overflow-hidden max-w-[80px]">
-                                      <div className="h-full rounded-full bg-[#007AFF]" style={{ width: `${(slide.confidence || 0) * 100}%` }} />
+                                      <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${(slide.confidence || 0) * 100}%` }} />
                                     </div>
                                     <span className="text-[12px] font-medium tabular-nums">{((slide.confidence || 0) * 100).toFixed(0)}%</span>
                                   </div>
@@ -1300,7 +1308,7 @@ export default function TrialDetail() {
                     setEsign({ mode: 'correct', patientId: correcting.patientId, slideId: correcting.slideId, correction: g.text });
                     setEsignPassword(''); setEsignError(''); setCorrecting(null);
                   }}
-                  className="w-full text-left px-3.5 py-2.5 rounded-[10px] border border-[var(--border-medium)] hover:border-[#007AFF] hover:bg-[#007AFF]/[0.04] transition-colors"
+                  className="w-full text-left px-3.5 py-2.5 rounded-[10px] border border-[var(--border-medium)] hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] transition-colors"
                 >
                   <p className="text-[13px] font-semibold">{g.text}</p>
                   <p className="text-[11px] text-[var(--text-secondary)]">{g.meaning}</p>

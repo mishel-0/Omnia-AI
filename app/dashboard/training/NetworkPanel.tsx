@@ -34,8 +34,8 @@ function FederatedDiagram() {
         <path d={inPath2} stroke="var(--border-medium)" strokeWidth="1.5" />
 
         {/* this device */}
-        <circle cx="30" cy="70" r="18" fill="var(--bg-card-solid)" stroke="#007AFF" strokeWidth="2" />
-        <text x="30" y="74" textAnchor="middle" fontSize="9" fontWeight="700" fill="#007AFF">You</text>
+        <circle cx="30" cy="70" r="18" fill="var(--bg-card-solid)" stroke="var(--accent)" strokeWidth="2" />
+        <text x="30" y="74" textAnchor="middle" fontSize="9" fontWeight="700" fill="var(--accent)">You</text>
 
         {/* other sites, faint — they exist but this device never sees who they are */}
         <circle cx="290" cy="40" r="13" fill="var(--bg-card-solid)" stroke="var(--border-medium)" strokeWidth="1.5" />
@@ -52,7 +52,7 @@ function FederatedDiagram() {
 
       {/* moving packets */}
       <div
-        className="absolute w-2 h-2 rounded-full bg-[#007AFF] animate-network-flow-out"
+        className="absolute w-2 h-2 rounded-full bg-[var(--accent)] animate-network-flow-out"
         style={{
           left: 0, top: 0,
           ['--flow-path-out' as string]: `"${outPath.replace(/"/g, "'")}"`,
@@ -216,7 +216,7 @@ export default function NetworkPanel() {
                     <button
                       type="button"
                       onClick={(e) => { e.preventDefault(); setShowTerms(true); }}
-                      className="underline text-[#007AFF] hover:text-[#0060df]"
+                      className="underline text-[var(--accent)] hover:text-[#0060df]"
                     >
                       Omnia Network terms
                     </button>
@@ -249,7 +249,7 @@ export default function NetworkPanel() {
           >
             <div className="flex items-start justify-between gap-3 mb-4">
               <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-[#007AFF]" />
+                <FileText className="w-4 h-4 text-[var(--accent)]" />
                 <h3 className="text-[14px] font-semibold">
                   Omnia Network terms — {status.terms_version}
                 </h3>

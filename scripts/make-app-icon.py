@@ -18,12 +18,15 @@ from PIL import Image, ImageDraw, ImageFilter
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 S = 1024  # master size
 
-# Palette pulled from the original glossy button so the identity carries over.
-BG_TOP = (26, 46, 74)
-BG_BOTTOM = (8, 15, 28)
-RING = (58, 86, 126)
-NEON = (94, 208, 255)
-NEON_CORE = (222, 246, 255)
+# Sky-blue clinical palette, matching --accent in app/globals.css so the icon
+# on the dock and the accent inside the window are recognisably the same
+# product. The ground stays deep so the icon reads on both a light and a dark
+# desktop; the pulse carries the sky blue.
+BG_TOP = (14, 74, 110)      # deep sky, sky-900-ish
+BG_BOTTOM = (7, 32, 51)
+RING = (56, 132, 178)
+NEON = (56, 189, 248)       # sky-400 — same family as --accent
+NEON_CORE = (224, 247, 255)
 
 
 def squircle_mask(size, radius_ratio=0.2237):

@@ -114,7 +114,7 @@ export default function RegisterPatientDialog({
 
   const inputCls = (bad?: boolean) =>
     'w-full px-3 py-2.5 rounded-[10px] border bg-[var(--bg-primary)] text-[var(--text-primary)] text-[13px] focus:outline-none focus:ring-2 transition-colors ' +
-    (bad ? 'border-[#FF3B30] focus:ring-[#FF3B30]' : 'border-[var(--border-medium)] focus:ring-[#007AFF]');
+    (bad ? 'border-[#FF3B30] focus:ring-[#FF3B30]' : 'border-[var(--border-medium)] focus:ring-[var(--accent)]');
 
   return (
     <div
@@ -185,7 +185,7 @@ export default function RegisterPatientDialog({
               <select
                 id="pt-sex" value={draft.sex}
                 onChange={e => setDraft({ ...draft, sex: e.target.value })}
-                className="w-full px-3 py-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-[13px] focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                className="w-full px-3 py-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-[13px] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
               >
                 <option value="">Not stated</option>
                 <option value="male">Male</option>
@@ -209,7 +209,7 @@ export default function RegisterPatientDialog({
             <textarea
               id="pt-notes" value={draft.notes}
               onChange={e => setDraft({ ...draft, notes: e.target.value })}
-              className="w-full px-3 py-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-[13px] resize-none h-20 focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+              className="w-full px-3 py-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-[13px] resize-none h-20 focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
             />
           </div>
         </div>

@@ -26,6 +26,19 @@
     --ios-sidebar-bg: rgba(255, 255, 255, 0.6);
     --viewport-bg: #1C1C1E;
     --toolbar-bg: rgba(255, 255, 255, 0.8);
+
+    /* ── Accent ──
+       A mid sky blue, not the iOS navy this used to be. It was hardcoded as
+       a literal hex in 98 places, which is why the product could not be rethemed
+       without a find-and-replace across every file. Routed through tokens so
+       each theme can carry the shade that actually reads on its own ground:
+       small text needs a deeper blue on white than it does on near-black. */
+    --accent: #0284C7;          /* sky-600 — passes contrast for text on light */
+    --accent-bright: #0EA5E9;   /* sky-500 — fills, charts, large elements */
+    --accent-hover: #0369A1;
+    --accent-soft: rgba(14, 165, 233, 0.10);
+    --accent-border: rgba(14, 165, 233, 0.28);
+    --accent-contrast: #FFFFFF; /* text placed on top of --accent */
   }
 
   /* ── Theme: Dark ── */
@@ -50,6 +63,15 @@
     --ios-sidebar-bg: rgba(15, 15, 25, 0.7);
     --viewport-bg: #0a0a0f;
     --toolbar-bg: rgba(255, 255, 255, 0.06);
+
+    /* Lighter on dark: sky-600 on a near-black ground is too low-contrast to
+       read, so the accent steps up rather than being reused unchanged. */
+    --accent: #38BDF8;          /* sky-400 */
+    --accent-bright: #0EA5E9;   /* sky-500 */
+    --accent-hover: #7DD3FC;
+    --accent-soft: rgba(56, 189, 248, 0.14);
+    --accent-border: rgba(56, 189, 248, 0.32);
+    --accent-contrast: #04263A; /* dark text on a bright accent fill */
   }
 
   body {
@@ -79,7 +101,7 @@
 
   /* Selection color */
   ::selection {
-    background: rgba(0, 122, 255, 0.15);
+    background: var(--accent-soft);
     color: var(--text-primary);
   }
 }
@@ -152,7 +174,7 @@
     background: linear-gradient(135deg, rgba(52, 199, 89, 0.05), rgba(52, 199, 89, 0.02));
   }
   .health-ring-blue {
-    background: linear-gradient(135deg, rgba(0, 122, 255, 0.05), rgba(0, 122, 255, 0.02));
+    background: linear-gradient(135deg, var(--accent-soft), transparent);
   }
 
   /* Apple Health ring progress bar */
@@ -166,7 +188,7 @@
   }
   .health-progress-ring-blue {
     @apply h-full rounded-full transition-all duration-700;
-    background: linear-gradient(90deg, #007AFF, #5856D6);
+    background: linear-gradient(90deg, var(--accent), #5856D6);
   }
 
   /* PACS viewport controls */
@@ -198,11 +220,11 @@
     position: absolute;
     inset: 0;
     border-radius: inherit;
-    background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 50%, rgba(0,122,255,0.02) 100%);
+    background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 50%, rgba(14,165,233,0.04) 100%);
     pointer-events: none;
   }
   [data-theme="dark"] .glass-gradient::before {
-    background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, transparent 50%, rgba(0,122,255,0.03) 100%);
+    background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, transparent 50%, rgba(14,165,233,0.05) 100%);
   }
 
   /* Theme transition */
@@ -277,7 +299,7 @@
   width: 16px;
   height: 16px;
   border-radius: 9999px;
-  background: #007AFF;
+  background: var(--accent);
   border: 2px solid #FFFFFF;
   cursor: pointer;
   transition: transform 0.1s ease;
@@ -357,8 +379,8 @@
   animation: network-flow-in 2.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 @keyframes hub-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 122, 255, 0.35); }
-  50%      { box-shadow: 0 0 0 10px rgba(0, 122, 255, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 var(--accent-border); }
+  50%      { box-shadow: 0 0 0 10px rgba(14, 165, 233, 0); }
 }
 .animate-hub-pulse {
   animation: hub-pulse 2.6s ease-in-out infinite;

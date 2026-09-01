@@ -13,7 +13,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import {
   ArrowLeft, FlaskConical, FileText, Layers, ChevronRight,
-  ShieldCheck, Download, Users,
+  ShieldCheck, Download, Users, Activity, Microscope, Ruler, TrendingUp,
 } from 'lucide-react';
 import { Card, Button, EmptyState, TableSkeleton } from '@/components/ui';
 import { apiFetch, apiSend } from '@/lib/auth';
@@ -28,6 +28,19 @@ interface Slide {
   grade?: string | null;
   grade_group?: number | null;
   confirmed?: boolean;
+  /** The container endpoint has always returned the whole visit record, so
+   *  these arrived on every slide and were simply never declared here — the
+   *  clinical detail was on the wire and thrown away at the type boundary. */
+  risk_group?: string | null;
+  confidence?: number | null;
+  tumor_involvement_pct?: number | null;
+  perineural_invasion?: boolean | null;
+  lymphovascular_invasion?: boolean | null;
+  cribriform_pattern?: boolean | null;
+  doctor_correction?: string | null;
+  corrected_grade_group?: number | null;
+  signed_by?: string | null;
+  signed_at?: string | null;
 }
 interface Visit {
   id: string;
@@ -68,6 +81,163 @@ interface Container {
     trials: number; visits: number; slides: number;
     analysed: number; confirmed: number; reports: number;
   };
+}
+
+/** Every graded slide this patient has, oldest first.
+ *
+ * The grade a patient "has" at a timepoint is the pathologist's if they
+ * corrected it, and the model's otherwise — a corrected slide must never
+ * report the grade that was overruled. */
+interface Point {
+  date: string;
+  visit: string;
+  trial: string;
+  slide: Slide;
+  grade_group: number;
+  corrected: boolean;
+}
+
+function timeline(enrollments: Enrollment[]): Point[] {
+  const pts: Point[] = [];
+  for (const e of enrollments) {
+    for (const v of e.visits) {
+      for (const s of v.slides) {
+        const gg = s.corrected_grade_group ?? s.grade_group;
+        if (gg === null || gg === undefined) continue;
+        pts.push({
+          date: v.created,
+          visit: v.visit,
+          trial: e.trial_name,
+          slide: s,
+          grade_group: gg,
+          corrected: s.corrected_grade_group !== null && s.corrected_grade_group !== undefined,
+        });
+      }
+    }
+  }
+  return pts.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+}
+
+const RISK_TONE: Record<string, string> = {
+  'Very Low': '#34C759', Low: '#34C759', Intermediate: '#FF9500',
+  'Favorable Intermediate': '#FF9500', 'Unfavorable Intermediate': '#FF9500',
+  High: '#FF3B30', 'Very High': '#FF3B30', Benign: '#34C759',
+};
+
+/** Grade group drives the colour everywhere it appears, so a reader learns one
+ *  mapping rather than a different scale per card. 0–1 benign/low, 2–3 middle,
+ *  4–5 high. */
+function gradeTone(gg: number | null | undefined): string {
+  if (gg === null || gg === undefined) return 'var(--text-secondary)';
+  if (gg <= 1) return '#34C759';
+  if (gg <= 3) return '#FF9500';
+  return '#FF3B30';
+}
+
+/** A metric tile: big number, unit, and the change since baseline where one
+ *  exists. Deliberately states the delta as a grade-group change and nothing
+ *  more — a grade moving is a measurement, not evidence a treatment worked. */
+function StatCard({
+  icon: Icon, label, value, unit, delta, tone,
+}: {
+  icon: React.ElementType; label: string; value: string; unit?: string;
+  delta?: { text: string; good: boolean | null } | null; tone?: string;
+}) {
+  return (
+    <div className="rounded-[18px] bg-[var(--bg-card-solid)] border border-[var(--border-subtle)] px-4 py-3.5">
+      <div className="flex items-center gap-1.5 mb-2">
+        <Icon className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+        <span className="text-[11.5px] font-medium text-[var(--text-secondary)]">{label}</span>
+      </div>
+      <div className="flex items-end justify-between gap-2">
+        <p className="text-[26px] font-semibold leading-none tabular-nums" style={{ color: tone }}>
+          {value}
+          {unit && <span className="text-[13px] font-medium text-[var(--text-secondary)] ml-1">{unit}</span>}
+        </p>
+        {delta && (
+          <span
+            className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md whitespace-nowrap"
+            style={{
+              color: delta.good === null ? 'var(--text-secondary)' : delta.good ? '#1a7a35' : '#c0392b',
+              background: delta.good === null ? 'var(--skeleton-bg)'
+                : delta.good ? 'rgba(52,199,89,0.12)' : 'rgba(255,59,48,0.12)',
+            }}
+          >
+            {delta.text}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Grade group across visits. Small enough to read at a glance, and plotted on
+ *  the fixed 0–5 ISUP scale rather than auto-scaling — an auto-scaled axis makes
+ *  a one-step change look dramatic, which is exactly the misreading to avoid. */
+function GradeTimeline({ points }: { points: Point[] }) {
+  if (points.length === 0) {
+    return (
+      <p className="text-[12px] text-[var(--text-secondary)] py-8 text-center">
+        No graded slides yet. The timeline appears once a slide has been analysed.
+      </p>
+    );
+  }
+  const w = 640, h = 150, padL = 26, padR = 12, padT = 12, padB = 26;
+  const plotW = w - padL - padR, plotH = h - padT - padB;
+  const x = (i: number) => points.length === 1
+    ? padL + plotW / 2
+    : padL + (i / (points.length - 1)) * plotW;
+  const y = (gg: number) => padT + (1 - gg / 5) * plotH;
+
+  const line = points.map((p, i) => `${x(i).toFixed(1)},${y(p.grade_group).toFixed(1)}`).join(' ');
+
+  return (
+    <div className="overflow-x-auto custom-scrollbar">
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full min-w-[420px] h-[170px]">
+        {[0, 1, 2, 3, 4, 5].map(g => (
+          <g key={g}>
+            <line x1={padL} x2={w - padR} y1={y(g)} y2={y(g)}
+                  stroke="var(--border-subtle)" strokeWidth="1" />
+            <text x={padL - 7} y={y(g) + 3} textAnchor="end"
+                  fontSize="9" fill="var(--text-secondary)">{g}</text>
+          </g>
+        ))}
+        {points.length > 1 && (
+          <polyline points={line} fill="none" stroke="var(--accent)"
+                    strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        )}
+        {points.map((p, i) => (
+          <g key={i}>
+            <circle cx={x(i)} cy={y(p.grade_group)} r="4.5"
+                    fill={gradeTone(p.grade_group)} stroke="var(--bg-card-solid)" strokeWidth="2" />
+            <text x={x(i)} y={h - 9} textAnchor="middle" fontSize="9"
+                  fill="var(--text-secondary)">{p.visit}</text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+/** Present / absent / not assessed — three states, never collapsed to two.
+ *  "Not assessed" and "absent" are different clinical statements. */
+function FindingRow({ label, value }: { label: string; value: boolean | null | undefined }) {
+  const known = value === true || value === false;
+  return (
+    <div className="flex items-center justify-between gap-3 py-2 border-b border-[var(--border-subtle)] last:border-0">
+      <span className="text-[12.5px]">{label}</span>
+      <span
+        className="text-[11.5px] font-semibold px-2 py-0.5 rounded-full"
+        style={{
+          color: !known ? 'var(--text-secondary)' : value ? '#c0392b' : '#1a7a35',
+          background: !known ? 'var(--skeleton-bg)'
+            : value ? 'rgba(255,59,48,0.12)' : 'rgba(52,199,89,0.12)',
+        }}
+      >
+        {!known ? 'Not assessed' : value ? 'Present' : 'Absent'}
+      </span>
+    </div>
+  );
 }
 
 export default function PatientContainerPage() {
@@ -112,6 +282,23 @@ export default function PatientContainerPage() {
 
   const p = data?.patient;
 
+  // Derived once here rather than inline in the JSX, so the "latest" grade has
+  // exactly one definition on this page.
+  const points = React.useMemo(() => timeline(data?.enrollments ?? []), [data]);
+  const latest = points.length ? points[points.length - 1] : null;
+  const baseline = points.length ? points[0] : null;
+
+  // Reported only as a change in the measurement. A grade moving down is not
+  // evidence a treatment worked — that is a conclusion drawn from a controlled
+  // comparison across a population, not from one patient's biopsies, which also
+  // sample different tissue each time.
+  const gradeDelta = React.useMemo(() => {
+    if (!latest || !baseline || latest === baseline) return null;
+    const d = latest.grade_group - baseline.grade_group;
+    if (d === 0) return { text: 'no change', good: null as boolean | null };
+    return { text: `${d > 0 ? '+' : ''}${d} vs baseline`, good: d < 0 };
+  }, [latest, baseline]);
+
   return (
     <div className="min-h-screen">
       <div className="titlebar-drag titlebar-inset border-b border-[var(--border-subtle)] flex items-center gap-4 pr-6 py-3">
@@ -136,34 +323,129 @@ export default function PatientContainerPage() {
           />
         ) : (
           <>
-            {/* Identity strip */}
-            <div className="flex items-end justify-between gap-6 flex-wrap mb-6">
-              <div>
-                <h2 className="text-[26px] font-semibold tracking-[-0.5px] leading-tight tabular-nums">{p.uid}</h2>
-                <p className="text-[12.5px] text-[var(--text-secondary)] mt-1">
+            {/* ── Metric row ──
+                Latest reading per measure, with the change since this
+                patient's first graded slide where there is one. */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+              <StatCard
+                icon={Activity}
+                label="ISUP Grade Group"
+                value={latest ? String(latest.grade_group) : '—'}
+                tone={gradeTone(latest?.grade_group)}
+                delta={gradeDelta}
+              />
+              <StatCard
+                icon={Microscope}
+                label="Gleason"
+                value={latest ? (latest.slide.doctor_correction || latest.slide.grade || '—') : '—'}
+              />
+              <StatCard
+                icon={Ruler}
+                label="Tumour involvement"
+                value={latest?.slide.tumor_involvement_pct != null
+                  ? String(latest.slide.tumor_involvement_pct) : '—'}
+                unit={latest?.slide.tumor_involvement_pct != null ? '%' : undefined}
+              />
+              <StatCard
+                icon={ShieldCheck}
+                label="Slides signed"
+                value={`${data.totals.confirmed}/${data.totals.slides}`}
+                tone={data.totals.slides > 0 && data.totals.confirmed === data.totals.slides
+                  ? '#34C759' : undefined}
+              />
+            </div>
+
+            <div className="grid lg:grid-cols-3 gap-3 mb-6">
+              {/* Identity */}
+              <div className="rounded-[18px] bg-[var(--bg-card-solid)] border border-[var(--border-subtle)] p-5">
+                <div className="flex items-start gap-3">
+                  <div className="w-11 h-11 rounded-full bg-[var(--accent-soft)] border border-[var(--accent-border)] flex items-center justify-center shrink-0">
+                    <span className="text-[13px] font-bold text-[var(--accent)]">
+                      {p.initials || '—'}
+                    </span>
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-[17px] font-semibold tracking-[-0.3px] tabular-nums truncate">{p.uid}</h2>
+                    <p className="text-[11.5px] text-[var(--text-secondary)] mt-0.5">
+                      {[
+                        p.sex || null,
+                        p.year_of_birth ? `b. ${p.year_of_birth}` : null,
+                      ].filter(Boolean).join(' · ') || 'No demographics recorded'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-2.5">
                   {[
-                    p.initials || null,
-                    p.year_of_birth ? `b. ${p.year_of_birth}` : null,
-                    p.sex || null,
-                    p.site || null,
-                  ].filter(Boolean).join(' · ') || 'No profile details recorded'}
-                </p>
+                    ['Site', p.site || '—'],
+                    ['Registered', p.created ? new Date(p.created).toLocaleDateString() : '—'],
+                    ['Trials', String(data.totals.trials)],
+                    ['Visits', String(data.totals.visits)],
+                  ].map(([k, v]) => (
+                    <div key={k} className="flex items-center justify-between gap-3">
+                      <span className="text-[11.5px] text-[var(--text-secondary)]">{k}</span>
+                      <span className="text-[12.5px] font-medium tabular-nums">{v}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {p.notes && (
+                  <div className="mt-4 pt-3 border-t border-[var(--border-subtle)]">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.6px] text-[var(--text-secondary)] mb-1">Notes</p>
+                    <p className="text-[12px] leading-relaxed whitespace-pre-wrap">{p.notes}</p>
+                  </div>
+                )}
               </div>
-              <div className="flex items-stretch gap-6">
-                <Metric label="Trials" value={data.totals.trials} />
-                <Divider />
-                <Metric label="Visits" value={data.totals.visits} />
-                <Divider />
-                <Metric label="Slides" value={data.totals.slides} />
-                <Divider />
-                <Metric label="Signed" value={data.totals.confirmed} accent="#34C759" />
+
+              {/* Grade over time — the reason the patient container exists */}
+              <div className="lg:col-span-2 rounded-[18px] bg-[var(--bg-card-solid)] border border-[var(--border-subtle)] p-5">
+                <div className="flex items-center justify-between gap-3 mb-1">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-[var(--accent)]" />
+                    <h3 className="text-[13.5px] font-semibold">Grade over time</h3>
+                  </div>
+                  <span className="text-[10.5px] text-[var(--text-secondary)]">ISUP 0–5</span>
+                </div>
+                <p className="text-[11px] text-[var(--text-secondary)] mb-2">
+                  Every graded slide for this patient, oldest first. A corrected slide
+                  plots the pathologist&rsquo;s grade, not the model&rsquo;s.
+                </p>
+                <GradeTimeline points={points} />
               </div>
             </div>
 
-            {p.notes && (
-              <div className="rounded-[12px] border border-[var(--border-subtle)] bg-[var(--bg-card-solid)] px-4 py-3 mb-5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.6px] text-[var(--text-secondary)] mb-1">Notes</p>
-                <p className="text-[12.5px] leading-relaxed whitespace-pre-wrap">{p.notes}</p>
+            {/* Findings + risk, from the most recent graded slide */}
+            {latest && (
+              <div className="grid lg:grid-cols-3 gap-3 mb-6">
+                <div className="lg:col-span-2 rounded-[18px] bg-[var(--bg-card-solid)] border border-[var(--border-subtle)] p-5">
+                  <h3 className="text-[13.5px] font-semibold mb-1">Latest findings</h3>
+                  <p className="text-[11px] text-[var(--text-secondary)] mb-2">
+                    From {latest.visit} · {latest.date ? new Date(latest.date).toLocaleDateString() : '—'}
+                  </p>
+                  <FindingRow label="Perineural invasion (PNI)" value={latest.slide.perineural_invasion} />
+                  <FindingRow label="Lymphovascular invasion (LVI)" value={latest.slide.lymphovascular_invasion} />
+                  <FindingRow label="Cribriform pattern" value={latest.slide.cribriform_pattern} />
+                </div>
+
+                <div className="rounded-[18px] bg-[var(--bg-card-solid)] border border-[var(--border-subtle)] p-5">
+                  <h3 className="text-[13.5px] font-semibold mb-3">Risk category</h3>
+                  <p className="text-[22px] font-semibold leading-tight"
+                     style={{ color: RISK_TONE[latest.slide.risk_group || ''] || 'var(--text-primary)' }}>
+                    {latest.slide.risk_group || '—'}
+                  </p>
+                  <p className="text-[11px] text-[var(--text-secondary)] mt-1.5 leading-relaxed">
+                    {latest.corrected
+                      ? 'Based on the pathologist’s corrected grade.'
+                      : latest.slide.confirmed
+                        ? 'Based on a grade the pathologist confirmed.'
+                        : 'Based on the model’s grade — not yet reviewed.'}
+                  </p>
+                  {latest.slide.confidence != null && !latest.corrected && (
+                    <p className="text-[11px] text-[var(--text-secondary)] mt-2 tabular-nums">
+                      Model confidence {(latest.slide.confidence * 100).toFixed(0)}%
+                    </p>
+                  )}
+                </div>
               </div>
             )}
 
@@ -286,7 +568,7 @@ export default function PatientContainerPage() {
                         <td className="px-4 py-3 text-right">
                           <button
                             onClick={() => openReport(r.file)}
-                            className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#007AFF] hover:underline"
+                            className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[var(--accent)] hover:underline"
                           >
                             <Download className="w-3.5 h-3.5" /> Open
                           </button>
@@ -323,18 +605,9 @@ function SectionHeading({ icon: Icon, title, count }: { icon: React.ElementType;
   );
 }
 
-function Metric({ label, value, accent }: { label: string; value: number; accent?: string }) {
-  return (
-    <div className="min-w-[68px]">
-      <p className="text-[11px] text-[var(--text-secondary)] whitespace-nowrap">{label}</p>
-      <p className="text-[24px] font-semibold tabular-nums leading-tight mt-0.5" style={{ color: accent }}>{value}</p>
-    </div>
-  );
-}
-
-function Divider() {
-  return <div className="w-px bg-[var(--border-subtle)] self-stretch" />;
-}
+// Metric and Divider lived here to build the old inline identity strip. The
+// header is now the StatCard row plus the identity card, so both are gone
+// rather than left as dead code that looks like it is still in use.
 
 function MiniStat({ label, text }: { label: string; text: string }) {
   return (

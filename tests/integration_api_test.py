@@ -764,6 +764,53 @@ check("T12 starting training requires auth", s == 401, f"expected 401, got {s}")
 s, _ = req("POST", "/api/training/model/revert", token=MONITOR)
 check("T13 a monitor cannot change the active model", s == 403, f"expected 403, got {s}")
 
+print("\n=== X. BATCH ANALYSIS QUEUE ===")
+
+from backend import batch as _bq
+
+s, _bj = req("GET", "/api/batch/jobs")
+check("X1 the batch queue is not readable anonymously", s == 401, f"expected 401, got {s}")
+s, _bj = req("GET", "/api/batch/jobs", token=ADMIN)
+check("X2 an authenticated caller can list batch jobs", s == 200 and isinstance(_bj, list), f"got {s}")
+
+s, _bj = req("POST", "/api/batch/trial", token=ADMIN, body={"trial_id": "does-not-exist"})
+check("X3 queueing a trial with nothing to analyse is a clean 409",
+      s == 409, f"expected 409, got {s}")
+
+# Progress must count every settled item. A bar that only advances on success
+# stalls forever on a cohort where some slides cannot be read.
+_j = _bq.enqueue([{"patient_uuid": "zz", "slide_id": f"z{i}"} for i in range(4)], trial_id="ZZ")
+_bq._settle(_j["id"], "zz", "z0", "done")
+_bq._settle(_j["id"], "zz", "z1", "failed", "unreadable")
+_after = _bq.get_job(_j["id"])
+check("X4 progress counts failures, not just successes",
+      _after["progress"] == 0.5, f"expected 0.5, got {_after['progress']}")
+
+# Cancelling a job whose work has all settled must close it. Left open, the
+# UI polls a job that can never change and keeps offering "Stop".
+_bq.cancel(_j["id"])
+_cancelled = _bq.get_job(_j["id"])
+check("X5 cancelling a fully-settled job closes it",
+      _cancelled["state"] == "finished" and _cancelled["finished_at"],
+      f"state={_cancelled['state']}, finished_at={_cancelled['finished_at']}")
+
+# But a job with a slide mid-analysis must stay open — the worker settles it.
+_j2 = _bq.enqueue([{"patient_uuid": "zz", "slide_id": "live"}], trial_id="ZZ2")
+_st = _bq._read()
+for _job in _st["jobs"]:
+    if _job["id"] == _j2["id"]:
+        _job["items"][0]["status"] = "running"
+_bq._write(_st)
+_bq.cancel(_j2["id"])
+check("X6 cancelling does not close a job with a slide still being analysed",
+      _bq.get_job(_j2["id"])["state"] != "finished",
+      "a job was closed while an analysis was still in flight")
+
+# Interrupted work is recoverable — the reason the queue is persisted at all.
+check("X7 a slide interrupted by a restart returns to pending",
+      _bq._recover_interrupted() >= 1,
+      "an interrupted slide was not returned to the queue")
+
 print("\n=== W. SIGNED REPORT CORRECTNESS ===")
 
 # The PDF is the document that leaves the building — it is what a sponsor, a

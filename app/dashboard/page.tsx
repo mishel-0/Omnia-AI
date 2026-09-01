@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, FlaskConical, Users, Download, Trash2, ShieldCheck, ScrollText, LogOut, ChevronDown, Search, Archive, RotateCcw, BookOpen, GraduationCap, ArrowRight } from 'lucide-react';
+import { Plus, FlaskConical, Users, Download, Trash2, ShieldCheck, ScrollText, LogOut, ChevronDown, Search, Archive, RotateCcw, BookOpen, GraduationCap, ArrowRight, Sun, Moon } from 'lucide-react';
 import { Card, Button, BrandMark, Pill, EmptyState, TableSkeleton } from '@/components/ui';
 import { apiFetch, apiSend, useAuth, canWrite, ROLE_LABELS } from '@/lib/auth';
 import { useToast } from '@/lib/toast';
 import { useDialogs } from '@/lib/dialogs';
 import { useOnboarding } from '@/lib/onboarding';
+import { useTheme } from '@/lib/theme';
 import CreateTrialDialog, { TrialDraft } from './components/CreateTrialDialog';
 import SystemHealth from './components/SystemHealth';
 
@@ -43,6 +44,7 @@ export default function TrialDashboard() {
   const toast = useToast();
   const { confirm } = useDialogs();
   const { open: openGuide } = useOnboarding();
+  const { theme, toggle: toggleTheme } = useTheme();
 
   const loadTrials = async () => {
     try {
@@ -249,7 +251,7 @@ export default function TrialDashboard() {
               onClick={() => setShowMenu(v => !v)}
               className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-[10px] hover:bg-[var(--skeleton-bg)] transition-colors"
             >
-              <div className="w-6 h-6 rounded-full bg-[#007AFF]/10 flex items-center justify-center text-[11px] font-semibold text-[#007AFF] shrink-0">
+              <div className="w-6 h-6 rounded-full bg-[var(--accent-soft)] flex items-center justify-center text-[11px] font-semibold text-[var(--accent)] shrink-0">
                 {(user?.full_name || '?').charAt(0).toUpperCase()}
               </div>
               <div className="text-left hidden md:block">
@@ -292,6 +294,21 @@ export default function TrialDashboard() {
                   >
                     <BookOpen className="w-3.5 h-3.5 text-[var(--text-secondary)]" /> Guide &amp; Help
                   </button>
+                  {/* Stays open on click: changing the theme is something you
+                      judge by looking at the result, and closing the menu
+                      would hide it behind another two clicks to change back. */}
+                  <button
+                    onClick={toggleTheme}
+                    className="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-[8px] text-[12px] hover:bg-[var(--skeleton-bg)] text-left"
+                  >
+                    <span className="flex items-center gap-2">
+                      {theme === 'dark'
+                        ? <Sun className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+                        : <Moon className="w-3.5 h-3.5 text-[var(--text-secondary)]" />}
+                      Appearance
+                    </span>
+                    <span className="text-[11px] text-[var(--text-secondary)] capitalize">{theme}</span>
+                  </button>
                   <button
                     onClick={() => { setShowMenu(false); router.push('/admin'); }}
                     className="w-full flex items-center gap-2 px-2.5 py-2 rounded-[8px] text-[12px] hover:bg-[var(--skeleton-bg)] text-left"
@@ -323,7 +340,7 @@ export default function TrialDashboard() {
         <div className="flex items-end justify-between gap-6 flex-wrap">
           <div>
             <h2 className="text-[26px] font-semibold tracking-[-0.5px] leading-tight">
-              {greeting}, <span className="text-[#007AFF]">{displayName}</span>
+              {greeting}, <span className="text-[var(--accent)]">{displayName}</span>
             </h2>
             <p className="text-[12.5px] text-[var(--text-secondary)] mt-1">
               {trials.length === 0
@@ -374,7 +391,7 @@ export default function TrialDashboard() {
                   <div key={b.id} className="flex-1 max-w-[40px] flex flex-col justify-end h-full min-w-[12px]" title={`${b.name}: ${b.confirmed}/${b.analyzed} signed`}>
                     <div className="w-full rounded-t-[5px] bg-[var(--skeleton-bg)] relative" style={{ height: '100%' }}>
                       <div
-                        className="absolute bottom-0 left-0 right-0 rounded-t-[5px] bg-[#007AFF]"
+                        className="absolute bottom-0 left-0 right-0 rounded-t-[5px] bg-[var(--accent)]"
                         style={{ height: `${b.pct}%` }}
                       />
                     </div>
@@ -383,7 +400,7 @@ export default function TrialDashboard() {
               </div>
               <div className="flex items-center gap-4 text-[11px] text-[var(--text-secondary)]">
                 <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-[2px] bg-[#007AFF]" /> Signed {totals.slides - totals.pending}
+                  <span className="w-2 h-2 rounded-[2px] bg-[var(--accent)]" /> Signed {totals.slides - totals.pending}
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-[2px] bg-[var(--skeleton-bg)] border border-[var(--border-subtle)]" /> Pending {totals.pending}
@@ -393,7 +410,7 @@ export default function TrialDashboard() {
 
             {/* The one accent card — deliberately the only saturated surface on
                 the page, so the eye lands on the outstanding work first. */}
-            <div className="rounded-[16px] p-5 flex flex-col justify-between" style={{ background: 'linear-gradient(145deg, #007AFF 0%, #0A63D6 100%)' }}>
+            <div className="rounded-[16px] p-5 flex flex-col justify-between" style={{ background: 'linear-gradient(145deg, var(--accent) 0%, #0A63D6 100%)' }}>
               <div>
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-[13px] font-semibold text-white/95">Needs a pathologist</p>
@@ -413,7 +430,7 @@ export default function TrialDashboard() {
               {firstPendingTrial && (
                 <button
                   onClick={() => router.push(`/dashboard/trials/${firstPendingTrial.id}`)}
-                  className="mt-4 self-start inline-flex items-center gap-1.5 text-[12px] font-medium text-[#007AFF] bg-white rounded-full px-3.5 py-1.5 hover:bg-white/90 transition-colors"
+                  className="mt-4 self-start inline-flex items-center gap-1.5 text-[12px] font-medium text-[var(--accent)] bg-white rounded-full px-3.5 py-1.5 hover:bg-white/90 transition-colors"
                 >
                   Open {firstPendingTrial.name} <ArrowRight className="w-3.5 h-3.5" />
                 </button>
@@ -449,7 +466,7 @@ export default function TrialDashboard() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search by trial, sponsor, drug, or indication…"
-                className="w-full pl-9 pr-3 py-2 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[13px] focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                className="w-full pl-9 pr-3 py-2 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[13px] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
               />
             </div>
             <div className="flex items-center gap-1 p-1 rounded-[10px] bg-[var(--skeleton-bg)]">
@@ -526,7 +543,7 @@ export default function TrialDashboard() {
                     <td className="px-4 py-3">
                       <div className="h-1.5 rounded-full bg-[var(--border-subtle)] overflow-hidden">
                         <div
-                          className="h-full rounded-full bg-[#007AFF]"
+                          className="h-full rounded-full bg-[var(--accent)]"
                           style={{ width: `${trial.slides_analyzed > 0 ? (trial.slides_confirmed / trial.slides_analyzed) * 100 : 0}%` }}
                         />
                       </div>
@@ -608,7 +625,7 @@ function NavPill({ label, active, onClick }: { label: string; active?: boolean; 
       className={
         'px-3.5 py-1.5 rounded-full text-[12.5px] font-medium whitespace-nowrap transition-colors ' +
         (active
-          ? 'bg-[#007AFF] text-white'
+          ? 'bg-[var(--accent)] text-white'
           : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--skeleton-bg)]')
       }
     >

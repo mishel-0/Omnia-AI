@@ -72,7 +72,7 @@ export default function AdminPage() {
     return (
       <div className="min-h-screen bg-[var(--bg-primary)] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 rounded-full border-2 border-[#007AFF]/20 border-t-[#007AFF] animate-spin" />
+          <div className="w-8 h-8 rounded-full border-2 border-[var(--accent-border)] border-t-[var(--accent)] animate-spin" />
           <p className="text-[12px] text-[var(--text-secondary)]">Loading system status…</p>
         </div>
       </div>

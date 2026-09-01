@@ -18,7 +18,7 @@ interface ToastContextValue {
 const ToastContext = createContext<ToastContextValue | null>(null);
 
 const ICONS: Record<ToastType, typeof CheckCircle2> = { success: CheckCircle2, error: XCircle, info: Info };
-const COLORS: Record<ToastType, string> = { success: '#34C759', error: '#FF3B30', info: '#007AFF' };
+const COLORS: Record<ToastType, string> = { success: '#34C759', error: '#FF3B30', info: 'var(--accent)' };
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);

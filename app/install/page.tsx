@@ -179,8 +179,8 @@ export default function InstallPage() {
                 <div className="flex flex-col items-center shrink-0">
                   <div className={
                     'w-[24px] h-[24px] rounded-full flex items-center justify-center shrink-0 transition-colors duration-300 ' +
-                    (state === 'done' ? 'bg-[#007AFF] text-white'
-                      : state === 'active' ? 'bg-[#007AFF]/12 text-[#007AFF] ring-2 ring-[#007AFF]/30'
+                    (state === 'done' ? 'bg-[var(--accent)] text-white'
+                      : state === 'active' ? 'bg-[var(--accent-soft)] text-[var(--accent)] ring-2 ring-[var(--accent-border)]'
                       : 'bg-[var(--skeleton-bg)] text-[var(--text-secondary)]')
                   }>
                     {state === 'done' ? <Check className="w-[12px] h-[12px]" /> : <Icon className="w-[12px] h-[12px]" />}
@@ -188,7 +188,7 @@ export default function InstallPage() {
                   {!isLast && (
                     <div className={
                       'w-[2px] flex-1 min-h-[22px] my-0.5 rounded-full transition-colors duration-300 ' +
-                      (i < step ? 'bg-[#007AFF]/40' : 'bg-[var(--border-subtle)]')
+                      (i < step ? 'bg-[var(--accent-soft)]' : 'bg-[var(--border-subtle)]')
                     } />
                   )}
                 </div>
@@ -220,7 +220,7 @@ export default function InstallPage() {
 
         <div className="flex-1 overflow-y-auto custom-scrollbar px-10 min-h-0 flex flex-col">
           <div className="w-full max-w-[460px] mx-auto my-auto py-8">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-[#007AFF] mb-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--accent)] mb-2">
               Step {step + 1} of {STEPS.length}
             </p>
 
@@ -292,7 +292,7 @@ export default function InstallPage() {
                 </div>
                 <label className="flex items-start gap-3 p-3.5 rounded-[10px] border border-[var(--border-subtle)] cursor-pointer hover:bg-[var(--skeleton-bg)] transition-colors">
                   <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)}
-                         className="mt-0.5 w-4 h-4 accent-[#007AFF] shrink-0" />
+                         className="mt-0.5 w-4 h-4 accent-[var(--accent)] shrink-0" />
                   <span className="text-[12px] leading-relaxed">
                     I have read and agree to the Licence Terms. I understand this software is a research tool only, is not a
                     diagnostic device, and that all AI output requires confirmation by a qualified pathologist.
@@ -334,7 +334,7 @@ export default function InstallPage() {
                         spellCheck={false}
                         autoComplete="off"
                         className={
-                          'w-full mt-1.5 px-3.5 py-2.5 rounded-[10px] border bg-[var(--bg-primary)] font-mono text-[12.5px] focus:outline-none focus:ring-2 focus:ring-[#007AFF]/40 ' +
+                          'w-full mt-1.5 px-3.5 py-2.5 rounded-[10px] border bg-[var(--bg-primary)] font-mono text-[12.5px] focus:outline-none focus:ring-2 focus:ring-[var(--accent-border)] ' +
                           (licenseState === 'invalid' ? 'border-[#FF3B30]' : 'border-[var(--border-medium)]')
                         }
                       />
@@ -368,7 +368,7 @@ export default function InstallPage() {
 
                 {preflight === null ? (
                   <div className="flex items-center gap-2.5 py-3">
-                    <Loader2 className="w-4 h-4 text-[#007AFF] animate-spin" />
+                    <Loader2 className="w-4 h-4 text-[var(--accent)] animate-spin" />
                     <span className="text-[12.5px] text-[var(--text-secondary)]">Running checks…</span>
                   </div>
                 ) : (
@@ -398,7 +398,7 @@ export default function InstallPage() {
                           {preflight.blocking_failures.join(' · ')} — setup can continue, but slide analysis
                           will fail until this is resolved.
                         </p>
-                        <button onClick={runChecks} className="text-[11.5px] text-[#007AFF] font-medium mt-2 hover:underline">
+                        <button onClick={runChecks} className="text-[11.5px] text-[var(--accent)] font-medium mt-2 hover:underline">
                           Run checks again
                         </button>
                       </div>
@@ -525,7 +525,7 @@ function TextField({ label, value, onChange, type = 'text', placeholder, autoCom
         placeholder={placeholder}
         autoComplete={autoComplete}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full mt-1.5 px-3.5 py-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[12.5px] focus:outline-none focus:ring-2 focus:ring-[#007AFF]/40"
+        className="w-full mt-1.5 px-3.5 py-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[12.5px] focus:outline-none focus:ring-2 focus:ring-[var(--accent-border)]"
       />
     </label>
   );

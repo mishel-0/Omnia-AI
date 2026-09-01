@@ -147,7 +147,7 @@ export function BackendConnection({ children }: { children: ReactNode }) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-[var(--bg-primary)] theme-transition">
         <div className="flex flex-col items-center gap-6 max-w-sm text-center px-6">
-          <div className="w-[48px] h-[48px] rounded-full border-[3px] border-[#007AFF]/20 border-t-[#007AFF] animate-spin" />
+          <div className="w-[48px] h-[48px] rounded-full border-[3px] border-[var(--accent-border)] border-t-[var(--accent)] animate-spin" />
           <div className="flex flex-col gap-1">
             <span className="text-[13px] font-semibold">{stage.text}</span>
             <span className="text-[11px] text-[var(--text-secondary)]">

@@ -210,7 +210,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 from backend.routes import (
     license_router, trials_router, reports_router, analysis_router,
     users_router, audit_router, queries_router, training_router,
-    patients_router,
+    patients_router, batch_router,
 )
 
 app.include_router(license_router)
@@ -222,6 +222,7 @@ app.include_router(analysis_router)
 app.include_router(audit_router)
 app.include_router(queries_router)
 app.include_router(training_router)
+app.include_router(batch_router)
 
 # A run recorded as "running" cannot have survived a restart — settle those now.
 try:
@@ -260,10 +261,21 @@ def _start_background_workers():
     build_default_workers().start()
 
 
+@app.on_event("startup")
+def _start_batch_queue():
+    """Resume the batch queue, including anything a previous process left
+    mid-flight. Slides interrupted by a restart go back to pending rather
+    than being silently dropped from the cohort."""
+    from backend import batch
+    batch.start()
+
+
 @app.on_event("shutdown")
 def _stop_background_workers():
     from backend.workers import supervisor
     supervisor.stop()
+    from backend import batch
+    batch.stop()
 
 # ─── Main Entrypoint ─────────────────────────────────────────────────────
 if __name__ == "__main__":

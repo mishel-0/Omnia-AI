@@ -86,7 +86,7 @@ export function SubjectTimeline({ trialId, patientId }: { trialId: string; patie
   return (
     <div className="rounded-[12px] border border-[var(--border-subtle)] bg-[var(--bg-primary)] p-4 mb-4">
       <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <Activity className="w-3.5 h-3.5 text-[#007AFF]" />
+        <Activity className="w-3.5 h-3.5 text-[var(--accent)]" />
         <p className="text-[12px] font-semibold">Subject {data.patient_id} — grade over time</p>
         <span className="text-[10px] text-[var(--text-secondary)]">
           {data.visit_count} visit{data.visit_count === 1 ? '' : 's'} · {data.graded_visit_count} graded

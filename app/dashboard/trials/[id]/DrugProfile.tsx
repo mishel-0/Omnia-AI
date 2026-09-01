@@ -184,7 +184,7 @@ export function DrugProfile({ trialId, writable }: { trialId: string; writable: 
               {!drug ? (
                 <div className="text-[11px] text-[var(--text-secondary)]">
                   No investigational product recorded for this trial.
-                  {writable && <> <button className="text-[#007AFF] underline" onClick={() => setEditing(true)}>Add one</button></>}
+                  {writable && <> <button className="text-[var(--accent)] underline" onClick={() => setEditing(true)}>Add one</button></>}
                 </div>
               ) : (
                 <>
@@ -257,7 +257,7 @@ export function DrugProfile({ trialId, writable }: { trialId: string; writable: 
           {evidence && (
             <div className="rounded-[10px] border border-[var(--border-subtle)] p-3">
               <div className="flex items-center gap-2 mb-2">
-                <FlaskConical className="w-3.5 h-3.5 text-[#007AFF]" />
+                <FlaskConical className="w-3.5 h-3.5 text-[var(--accent)]" />
                 <p className="text-[11.5px] font-semibold">Evidence summary</p>
               </div>
 

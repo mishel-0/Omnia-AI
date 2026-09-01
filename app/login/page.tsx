@@ -149,7 +149,7 @@ export default function LoginPage() {
                 onChange={(e) => setLicenseKey(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && activateLicense()}
                 placeholder="Enter your license key…"
-                className="w-full px-4 py-3 rounded-[12px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 focus:outline-none focus:ring-2 focus:ring-[#007AFF] font-mono text-[13px]"
+                className="w-full px-4 py-3 rounded-[12px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--accent)] font-mono text-[13px]"
                 disabled={licenseStatus === 'validating'}
               />
               <Button
@@ -191,7 +191,7 @@ export default function LoginPage() {
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Full name (e.g. Dr. Jane Smith)"
-                  className="w-full px-4 py-3 rounded-[12px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 focus:outline-none focus:ring-2 focus:ring-[#007AFF] text-[13px]"
+                  className="w-full px-4 py-3 rounded-[12px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--accent)] text-[13px]"
                 />
               )}
               <input
@@ -200,7 +200,7 @@ export default function LoginPage() {
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="Username"
                 autoComplete="username"
-                className="w-full px-4 py-3 rounded-[12px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 focus:outline-none focus:ring-2 focus:ring-[#007AFF] text-[13px]"
+                className="w-full px-4 py-3 rounded-[12px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--accent)] text-[13px]"
               />
               <input
                 type="password"
@@ -209,7 +209,7 @@ export default function LoginPage() {
                 onKeyDown={(e) => e.key === 'Enter' && submitAuth()}
                 placeholder="Password"
                 autoComplete={needsBootstrap ? 'new-password' : 'current-password'}
-                className="w-full px-4 py-3 rounded-[12px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 focus:outline-none focus:ring-2 focus:ring-[#007AFF] text-[13px]"
+                className="w-full px-4 py-3 rounded-[12px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--accent)] text-[13px]"
               />
             </div>
 

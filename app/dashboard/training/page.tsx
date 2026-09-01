@@ -73,7 +73,7 @@ function InfoDot({ text }: { text: string }) {
       <button
         type="button"
         aria-label={text}
-        className="w-[13px] h-[13px] rounded-full border border-[var(--border-medium)] text-[9px] leading-none font-semibold text-[var(--text-secondary)] flex items-center justify-center hover:border-[#007AFF] hover:text-[#007AFF] focus:outline-none focus:ring-2 focus:ring-[#007AFF] transition-colors"
+        className="w-[13px] h-[13px] rounded-full border border-[var(--border-medium)] text-[9px] leading-none font-semibold text-[var(--text-secondary)] flex items-center justify-center hover:border-[var(--accent)] hover:text-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] transition-colors"
       >
         ?
       </button>
@@ -122,7 +122,7 @@ function LossChart({ history }: { history: { epoch: number; loss: number; qwk: n
         Training loss
       </p>
       <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-[42px]" preserveAspectRatio="none">
-        <polyline points={pts} fill="none" stroke="#007AFF" strokeWidth="1.5"
+        <polyline points={pts} fill="none" stroke="var(--accent)" strokeWidth="1.5"
                   vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
       </svg>
     </div>
@@ -308,8 +308,8 @@ export default function TrainingPage() {
         {/* What this is — knowledge first, so the page is self-explanatory */}
         <Card size="sm" className="p-5">
           <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-[10px] bg-[#007AFF]/10 flex items-center justify-center shrink-0">
-              <GraduationCap className="w-[18px] h-[18px] text-[#007AFF]" />
+            <div className="w-9 h-9 rounded-[10px] bg-[var(--accent-soft)] flex items-center justify-center shrink-0">
+              <GraduationCap className="w-[18px] h-[18px] text-[var(--accent)]" />
             </div>
             <div>
               <h2 className="text-[14px] font-semibold">What training does</h2>
@@ -513,7 +513,7 @@ export default function TrainingPage() {
                   style={{
                     width: `${pct}%`,
                     background: run.state === 'completed' ? '#34C759'
-                      : run.state === 'failed' ? '#FF3B30' : '#007AFF',
+                      : run.state === 'failed' ? '#FF3B30' : 'var(--accent)',
                   }}
                 />
               </div>

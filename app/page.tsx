@@ -80,7 +80,7 @@ export default function Home() {
         <button onClick={toggleTheme}
           className="w-[34px] h-[34px] rounded-full bg-[var(--skeleton-bg)] flex items-center justify-center hover:scale-105 transition-all duration-200"
           title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>
-          {theme === 'dark' ? <Sun className="w-[16px] h-[16px] text-[#FF9500]" /> : <Moon className="w-[16px] h-[16px] text-[#007AFF]" />}
+          {theme === 'dark' ? <Sun className="w-[16px] h-[16px] text-[#FF9500]" /> : <Moon className="w-[16px] h-[16px] text-[var(--accent)]" />}
         </button>
       </header>
 
@@ -98,7 +98,7 @@ export default function Home() {
         <Card size="lg" className="w-full p-6 mb-4 text-left">
           <div className="flex items-center gap-3 mb-5">
             {backendStatus === 'connecting' && (
-              <div className="w-5 h-5 rounded-full border-2 border-[#007AFF] border-t-transparent animate-spin shrink-0" />
+              <div className="w-5 h-5 rounded-full border-2 border-[var(--accent)] border-t-transparent animate-spin shrink-0" />
             )}
             {backendStatus === 'online' && <Wifi className="w-5 h-5 text-[#34C759] shrink-0" />}
             {backendStatus === 'offline' && <WifiOff className="w-5 h-5 text-[#FF3B30] shrink-0" />}
@@ -131,7 +131,7 @@ export default function Home() {
             })();
             router.push(backendStatus === 'offline' || !setupDone ? '/install' : '/dashboard');
           }}
-          className="w-full bg-[#007AFF] hover:bg-[#0066CC] text-white font-semibold py-[16px] px-8 rounded-[14px] shadow-lg shadow-[#007AFF]/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 text-[17px] tracking-[-0.3px]"
+          className="w-full bg-[var(--accent)] hover:bg-[#0066CC] text-white font-semibold py-[16px] px-8 rounded-[14px] shadow-lg shadow-[var(--accent-soft)] active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 text-[17px] tracking-[-0.3px]"
         >
           {backendStatus === 'offline' ? 'Install Diagnostics Engine' : 'Continue'}
           <ArrowRight className="w-[20px] h-[20px]" />
