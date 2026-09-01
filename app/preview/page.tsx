@@ -16,7 +16,8 @@
 import React from 'react';
 import { notFound } from 'next/navigation';
 import { Users, Layers, ScrollText, FlaskConical, Search, ArrowRight } from 'lucide-react';
-import { Card, CardHeader, PillButton, AreaChart } from '@/components/ui';
+import { Card, CardHeader, PillButton, AreaChart,
+         Toggle, Segmented, SettingGroup, SettingRow, Pill } from '@/components/ui';
 import { StatCard, TrialCard, type Trial } from '../dashboard/page';
 import { useTheme } from '@/lib/theme';
 
@@ -52,6 +53,8 @@ export default function DashboardPreview() {
 
   const { theme, toggle } = useTheme();
   const [filter, setFilter] = React.useState<'all' | 'active' | 'closed'>('all');
+  const [sysOn, setSysOn] = React.useState(true);
+  const [seg, setSeg] = React.useState<'light' | 'dark'>('light');
 
   const shown = SAMPLE.filter(t => filter === 'all' || t.status === filter);
   const totals = {
@@ -159,6 +162,31 @@ export default function DashboardPreview() {
               {s}
             </PillButton>
           ))}
+        </div>
+
+        <div className="mt-8 max-w-2xl">
+          <SettingGroup title="Settings primitives" footnote="The same Toggle, Segmented and grouped rows the Settings screen uses.">
+            <SettingRow
+              title="Follow system"
+              description="Match the light or dark setting of macOS."
+              control={<Toggle checked={sysOn} onChange={setSysOn} label="Follow system" />}
+            />
+            <SettingRow
+              title="Theme"
+              description="Choosing a theme stops the app following your system setting."
+              control={<Segmented value={seg} options={[{value:'light',label:'Light'},{value:'dark',label:'Dark'}]} onChange={setSeg} />}
+            />
+            <SettingRow
+              title="Licence"
+              description="Licensed to Demo Organisation · expires 2030-12-31"
+              control={<Pill accent="green">Licensed</Pill>}
+            />
+            <SettingRow
+              title="Grading source"
+              description="Grades are produced by the model, not fabricated."
+              control={<Pill accent="blue">Real model</Pill>}
+            />
+          </SettingGroup>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">

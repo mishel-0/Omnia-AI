@@ -2,17 +2,16 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, FlaskConical, Users, Download, Trash2, ShieldCheck, ScrollText, LogOut, ChevronDown, Search, Archive, RotateCcw, BookOpen, GraduationCap, ArrowRight, Sun, Moon, Layers } from 'lucide-react';
-import { Card, Button, BrandMark, Pill, EmptyState, Skeleton, CardSkeleton,
+import { Plus, FlaskConical, Users, Download, Trash2, ScrollText, Search, Archive, RotateCcw, ArrowRight, Layers } from 'lucide-react';
+import { Card, Button, Pill, EmptyState, Skeleton, CardSkeleton,
          PillButton, CardHeader, AreaChart } from '@/components/ui';
-import { apiFetch, apiSend, useAuth, canWrite, ROLE_LABELS } from '@/lib/auth';
+import { apiFetch, apiSend, useAuth, canWrite } from '@/lib/auth';
 import { useToast } from '@/lib/toast';
 import { useDialogs } from '@/lib/dialogs';
-import { useOnboarding } from '@/lib/onboarding';
-import { useTheme } from '@/lib/theme';
 import { cn } from '@/lib/utils';
 import CreateTrialDialog, { TrialDraft } from './components/CreateTrialDialog';
 import SystemHealth from './components/SystemHealth';
+import AppBar from './components/AppBar';
 
 export interface Trial {
   id: string;
@@ -37,16 +36,13 @@ export default function TrialDashboard() {
   const [openQueries, setOpenQueries] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'closed'>('all');
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const writable = canWrite(user?.role);
   const toast = useToast();
   const { confirm } = useDialogs();
-  const { open: openGuide } = useOnboarding();
-  const { theme, toggle: toggleTheme } = useTheme();
 
   const loadTrials = async () => {
     try {
@@ -231,122 +227,14 @@ export default function TrialDashboard() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
-      {/* Top Bar */}
-      <div className="titlebar-drag titlebar-inset border-b border-[var(--border-subtle)] pr-6 py-3 flex items-center justify-between gap-4 bg-[var(--bg-card-solid)]">
-        <div className="flex items-center gap-2.5 shrink-0">
-          <BrandMark size={30} />
-          <div className="hidden lg:block">
-            <h1 className="text-[14px] font-semibold leading-tight">Omnia Pathology AI</h1>
-            <p className="text-[10px] text-[var(--text-secondary)] leading-tight">Research Use Only</p>
-          </div>
-        </div>
-
-        {/* Primary sections as pills. These were previously buried in the
-            account dropdown, which put the audit trail and user management
-            three clicks away from the screen a coordinator lives on. */}
-        <nav className="titlebar-no-drag flex items-center gap-1 min-w-0 overflow-x-auto">
-          <NavPill active label="Dashboard" onClick={() => {}} />
-          <NavPill label="Patients" onClick={() => router.push('/dashboard/patients')} />
-          {(user?.role === 'admin' || user?.role === 'monitor') && (
-            <NavPill label="Audit Trail" onClick={() => router.push('/dashboard/audit')} />
-          )}
-          {user?.role === 'admin' && (
-            <NavPill label="Users" onClick={() => router.push('/dashboard/users')} />
-          )}
-          {writable && (
-            <NavPill label="Model" onClick={() => router.push('/dashboard/training')} />
-          )}
-        </nav>
-
-        <div className="titlebar-no-drag flex items-center gap-2 shrink-0">
-          {writable && (
-            <Button size="sm" onClick={() => setShowCreate(true)}>
-              <Plus className="w-3.5 h-3.5" />
-              New Trial
-            </Button>
-          )}
-          <div className="relative">
-            <button
-              onClick={() => setShowMenu(v => !v)}
-              className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-[10px] hover:bg-[var(--skeleton-bg)] transition-colors"
-            >
-              <div className="w-6 h-6 rounded-full bg-[var(--accent-soft)] flex items-center justify-center text-[11px] font-semibold text-[var(--accent)] shrink-0">
-                {(user?.full_name || '?').charAt(0).toUpperCase()}
-              </div>
-              <div className="text-left hidden md:block">
-                <p className="text-[12px] font-medium leading-tight">{user?.full_name}</p>
-                <p className="text-[10px] text-[var(--text-secondary)] leading-tight">{user ? ROLE_LABELS[user.role] : ''}</p>
-              </div>
-              <ChevronDown className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
-            </button>
-            {showMenu && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-                <Card size="sm" className="absolute right-0 top-[calc(100%+6px)] w-[200px] z-50 p-1.5 shadow-xl">
-                  {user?.role === 'admin' && (
-                    <button
-                      onClick={() => { setShowMenu(false); router.push('/dashboard/users'); }}
-                      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-[8px] text-[12px] hover:bg-[var(--skeleton-bg)] text-left"
-                    >
-                      <Users className="w-3.5 h-3.5 text-[var(--text-secondary)]" /> Manage Users
-                    </button>
-                  )}
-                  {(user?.role === 'admin' || user?.role === 'monitor') && (
-                    <button
-                      onClick={() => { setShowMenu(false); router.push('/dashboard/audit'); }}
-                      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-[8px] text-[12px] hover:bg-[var(--skeleton-bg)] text-left"
-                    >
-                      <ScrollText className="w-3.5 h-3.5 text-[var(--text-secondary)]" /> Audit Trail
-                    </button>
-                  )}
-                  {writable && (
-                    <button
-                      onClick={() => { setShowMenu(false); router.push('/dashboard/training'); }}
-                      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-[8px] text-[12px] hover:bg-[var(--skeleton-bg)] text-left"
-                    >
-                      <GraduationCap className="w-3.5 h-3.5 text-[var(--text-secondary)]" /> Model Training
-                    </button>
-                  )}
-                  <button
-                    onClick={() => { setShowMenu(false); openGuide(); }}
-                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-[8px] text-[12px] hover:bg-[var(--skeleton-bg)] text-left"
-                  >
-                    <BookOpen className="w-3.5 h-3.5 text-[var(--text-secondary)]" /> Guide &amp; Help
-                  </button>
-                  {/* Stays open on click: changing the theme is something you
-                      judge by looking at the result, and closing the menu
-                      would hide it behind another two clicks to change back. */}
-                  <button
-                    onClick={toggleTheme}
-                    className="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-[8px] text-[12px] hover:bg-[var(--skeleton-bg)] text-left"
-                  >
-                    <span className="flex items-center gap-2">
-                      {theme === 'dark'
-                        ? <Sun className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
-                        : <Moon className="w-3.5 h-3.5 text-[var(--text-secondary)]" />}
-                      Appearance
-                    </span>
-                    <span className="text-[11px] text-[var(--text-secondary)] capitalize">{theme}</span>
-                  </button>
-                  <button
-                    onClick={() => { setShowMenu(false); router.push('/admin'); }}
-                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-[8px] text-[12px] hover:bg-[var(--skeleton-bg)] text-left"
-                  >
-                    <ShieldCheck className="w-3.5 h-3.5 text-[var(--text-secondary)]" /> System Health
-                  </button>
-                  <div className="h-px bg-[var(--border-subtle)] my-1" />
-                  <button
-                    onClick={async () => { await logout(); router.push('/login'); }}
-                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-[8px] text-[12px] hover:bg-[#FF3B30]/10 text-[#FF3B30] text-left"
-                  >
-                    <LogOut className="w-3.5 h-3.5" /> Sign Out
-                  </button>
-                </Card>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
+      <AppBar
+        actions={writable ? (
+          <Button size="sm" onClick={() => setShowCreate(true)}>
+            <Plus className="w-3.5 h-3.5" />
+            New Trial
+          </Button>
+        ) : undefined}
+      />
 
       <SystemHealth />
 
@@ -543,22 +431,6 @@ export default function TrialDashboard() {
 
 /** Top-bar section pill. Active is a solid fill so the current section is
  * unambiguous at a glance, matching how the rest of the app marks state. */
-function NavPill({ label, active, onClick }: { label: string; active?: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      aria-current={active ? 'page' : undefined}
-      className={
-        'px-3.5 py-1.5 rounded-full text-[12.5px] font-medium whitespace-nowrap transition-colors ' +
-        (active
-          ? 'bg-[var(--accent)] text-white'
-          : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--skeleton-bg)]')
-      }
-    >
-      {label}
-    </button>
-  );
-}
 
 /** A single headline figure in the greeting strip. */
 /** One figure, in a card. */

@@ -11,6 +11,7 @@ import { apiFetch, apiSend, useAuth, canWrite } from '@/lib/auth';
 import { useToast } from '@/lib/toast';
 import { useDialogs } from '@/lib/dialogs';
 import NetworkPanel from './NetworkPanel';
+import AppBar from '../components/AppBar';
 
 interface Hardware {
   os: string; arch: string; cpu_name: string;
@@ -229,6 +230,7 @@ export default function TrainingPage() {
   if (loading || !data) {
     return (
       <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
+        <AppBar />
         <div className="titlebar-inset border-b border-[var(--border-subtle)] pr-6 py-3.5 bg-[var(--bg-card-solid)]">
           <div className="w-44 h-3.5 rounded-[4px] skeleton-shimmer mb-1.5" />
           <div className="w-64 h-2.5 rounded-[4px] skeleton-shimmer" />
@@ -246,6 +248,7 @@ export default function TrainingPage() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
+      <AppBar />
       <div className="titlebar-inset border-b border-[var(--border-subtle)] pr-6 py-3.5 flex items-center gap-3 bg-[var(--bg-card-solid)]">
         <button onClick={() => router.push('/dashboard')} className="p-1.5 rounded-[8px] hover:bg-[var(--skeleton-bg)]">
           <ArrowLeft className="w-4 h-4" />

@@ -13,6 +13,7 @@ import { Card, Button, EmptyState, TableSkeleton } from '@/components/ui';
 import { apiSend, useAuth, canWrite } from '@/lib/auth';
 import { useToast } from '@/lib/toast';
 import RegisterPatientDialog, { PatientProfileDraft } from '../components/RegisterPatientDialog';
+import AppBar from '../components/AppBar';
 
 interface Patient {
   uid: string;
@@ -67,6 +68,7 @@ export default function PatientRegistry() {
 
   return (
     <div className="min-h-screen">
+      <AppBar />
       <div className="titlebar-drag titlebar-inset border-b border-[var(--border-subtle)] flex items-center gap-4 pr-6 py-3">
         <button
           onClick={() => router.push('/dashboard')}

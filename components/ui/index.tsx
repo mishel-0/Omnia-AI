@@ -302,6 +302,145 @@ export function AreaChart({
   );
 }
 
+/** An iOS-style switch.
+ *
+ * A real <button role="switch">, not a styled checkbox, so it announces its
+ * state to assistive technology and takes focus and the space bar the way a
+ * control on macOS does. The knob moves on a spring-like curve rather than a
+ * linear one — the difference between "an element translated" and "a physical
+ * switch flicked" is entirely in the easing.
+ */
+export function Toggle({
+  checked,
+  onChange,
+  label,
+  disabled,
+  className,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  label?: string;
+  disabled?: boolean;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={cn(
+        'relative inline-flex items-center shrink-0 rounded-full ios-spring',
+        'w-[51px] h-[31px] p-[2px] focus:outline-none',
+        'focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2',
+        'focus-visible:ring-offset-[var(--bg-card-solid)]',
+        disabled && 'opacity-40 pointer-events-none',
+        className,
+      )}
+      style={{ background: checked ? 'var(--accent)' : 'var(--switch-track)' }}
+    >
+      <span
+        className="block w-[27px] h-[27px] rounded-full bg-white ios-spring"
+        style={{
+          transform: `translateX(${checked ? 20 : 0}px)`,
+          boxShadow: '0 3px 8px rgba(0,0,0,0.15), 0 1px 1px rgba(0,0,0,0.16)',
+        }}
+      />
+    </button>
+  );
+}
+
+/** A grouped settings row — label, optional description, control on the right.
+ *  The inset-grouped list macOS and iOS use for every settings screen. */
+export function SettingRow({
+  title,
+  description,
+  control,
+  className,
+}: {
+  title: string;
+  description?: string;
+  control?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn('flex items-center justify-between gap-4 px-4 py-3.5', className)}>
+      <div className="min-w-0">
+        <p className="text-[13px] font-medium">{title}</p>
+        {description && (
+          <p className="text-[11.5px] text-[var(--text-secondary)] leading-relaxed mt-0.5">
+            {description}
+          </p>
+        )}
+      </div>
+      {control && <div className="shrink-0">{control}</div>}
+    </div>
+  );
+}
+
+/** A titled group of setting rows, hairline-separated. */
+export function SettingGroup({
+  title,
+  footnote,
+  children,
+}: {
+  title: string;
+  footnote?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="mb-6">
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.6px] text-[var(--text-secondary)] px-1 mb-2">
+        {title}
+      </h2>
+      <Card size="sm" className="divide-y divide-[var(--border-subtle)] overflow-hidden">
+        {children}
+      </Card>
+      {footnote && (
+        <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed px-1 mt-2">
+          {footnote}
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** A macOS segmented control — the Light / Dark / System picker. */
+export function Segmented<T extends string>({
+  value,
+  options,
+  onChange,
+  className,
+}: {
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+  className?: string;
+}) {
+  return (
+    <div className={cn('inline-flex items-center gap-0.5 p-0.5 rounded-[9px] bg-[var(--switch-track)]', className)}>
+      {options.map((o) => (
+        <button
+          key={o.value}
+          onClick={() => onChange(o.value)}
+          aria-pressed={value === o.value}
+          className={cn(
+            'px-3 py-1 rounded-[7px] text-[12px] font-medium transition-colors duration-200',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]',
+            value === o.value
+              ? 'bg-[var(--bg-card-solid)] text-[var(--text-primary)] shadow-sm'
+              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** Shimmering placeholder block for content that's still loading. */
 export function Skeleton({ className, ...rest }: React.HTMLAttributes<HTMLDivElement>) {
   return <div className={cn('skeleton-shimmer rounded-[6px]', className)} {...rest} />;

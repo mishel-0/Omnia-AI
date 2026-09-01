@@ -42,6 +42,8 @@
 
     --card-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 12px rgba(16, 24, 40, 0.04);
     --card-shadow-raised: 0 2px 4px rgba(16, 24, 40, 0.06), 0 12px 28px rgba(16, 24, 40, 0.10);
+    --switch-track: rgba(120, 120, 128, 0.16);
+    --chrome-bg: rgba(255, 255, 255, 0.72);
   }
 
   /* ── Theme: Dark ── */
@@ -80,6 +82,8 @@
        shadow on near-black is not visible at all. */
     --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.36);
     --card-shadow-raised: 0 4px 16px rgba(0, 0, 0, 0.48);
+    --switch-track: rgba(120, 120, 128, 0.32);
+    --chrome-bg: rgba(20, 20, 26, 0.68);
   }
 
   body {
@@ -425,6 +429,46 @@
     animation: none;
   }
 }
+
+/* Frosted window chrome. The tokens for this existed from the start and were
+   never applied to anything — the top bar was a flat opaque strip. A
+   translucent, blurred bar over scrolling content is the single strongest
+   signal that an app belongs on macOS rather than in a browser tab. The
+   -webkit- prefix stays: the packaged app runs on Electron's Chromium. */
+.glass-chrome {
+  background: var(--chrome-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+}
+/* Without a fallback the bar would be semi-transparent over live content and
+   unreadable anywhere backdrop-filter is unavailable. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-chrome { background: var(--bg-card-solid); }
+}
+
+/* The easing macOS uses for switches and sheets: quick to leave, settling
+   rather than stopping. A linear transition over the same distance reads as
+   mechanical, and that is most of what separates "animated" from "native". */
+.ios-spring {
+  transition-property: transform, background-color, box-shadow;
+  transition-duration: 0.32s;
+  transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Menus scale out of their own corner rather than appearing instantly. */
+@keyframes menu-in {
+  from { opacity: 0; transform: scale(0.96) translateY(-4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.animate-menu-in {
+  animation: menu-in 0.18s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ios-spring { transition-duration: 0.01ms; }
+  .animate-menu-in { animation: none; }
+}
+
 
 /* Apple-style squircle corners utility */
 .rounded-squircle {
