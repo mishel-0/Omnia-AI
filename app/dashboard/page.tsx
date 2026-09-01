@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, FlaskConical, Users, Download, Trash2, ShieldCheck, ScrollText, LogOut, ChevronDown, Search, Archive, RotateCcw, BookOpen, GraduationCap, ArrowRight, Sun, Moon, Layers } from 'lucide-react';
-import { Card, Button, BrandMark, Pill, EmptyState, Skeleton, CardSkeleton } from '@/components/ui';
+import { Card, Button, BrandMark, Pill, EmptyState, Skeleton, CardSkeleton,
+         PillButton, CardHeader, AreaChart } from '@/components/ui';
 import { apiFetch, apiSend, useAuth, canWrite, ROLE_LABELS } from '@/lib/auth';
 import { useToast } from '@/lib/toast';
 import { useDialogs } from '@/lib/dialogs';
@@ -13,7 +14,7 @@ import { cn } from '@/lib/utils';
 import CreateTrialDialog, { TrialDraft } from './components/CreateTrialDialog';
 import SystemHealth from './components/SystemHealth';
 
-interface Trial {
+export interface Trial {
   id: string;
   name: string;
   /** Added after first release — absent on trials registered before then. */
@@ -395,44 +396,43 @@ export default function TrialDashboard() {
               and how the portfolio is split. */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-5">
             {/* Review progress — real completion, not a decorative gauge */}
-            <div className="rounded-[16px] border border-[var(--border-subtle)] bg-[var(--bg-card-solid)] p-5">
-              <div className="flex items-center justify-between gap-2 mb-4">
-                <p className="text-[13px] font-semibold">Review progress</p>
-                <span className="text-[11px] text-[var(--text-secondary)] tabular-nums">
-                  {reviewedPct}%
-                </span>
-              </div>
-              <div className="flex items-end justify-start gap-1.5 h-[72px] mb-3">
-                {trialBars.length === 0 ? (
-                  <p className="text-[11px] text-[var(--text-secondary)]">No slides analysed yet.</p>
-                ) : trialBars.map((b) => (
-                  // Bars are capped in width and left-aligned. With flex-1 and
-                  // a single trial the "chart" became one solid slab filling
-                  // the card, which reads as a rendering fault rather than as
-                  // one trial's progress.
-                  <div key={b.id} className="flex-1 max-w-[40px] flex flex-col justify-end h-full min-w-[12px]" title={`${b.name}: ${b.confirmed}/${b.analyzed} signed`}>
-                    <div className="w-full rounded-t-[5px] bg-[var(--skeleton-bg)] relative" style={{ height: '100%' }}>
-                      <div
-                        className="absolute bottom-0 left-0 right-0 rounded-t-[5px] bg-[var(--accent)]"
-                        style={{ height: `${b.pct}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="flex items-center gap-4 text-[11px] text-[var(--text-secondary)]">
+            <Card size="md" className="p-5">
+              <CardHeader
+                title="Review progress"
+                action={
+                  <span className="text-[11.5px] font-semibold text-[var(--accent)] bg-[var(--accent-soft)] rounded-full px-2.5 py-1 tabular-nums">
+                    {reviewedPct}%
+                  </span>
+                }
+              />
+              {trialBars.length === 0 ? (
+                <div className="h-[96px] flex items-center">
+                  <p className="text-[11.5px] text-[var(--text-secondary)]">
+                    No slides analysed yet — the curve appears once grading starts.
+                  </p>
+                </div>
+              ) : (
+                <AreaChart
+                  points={trialBars.map((b) => b.pct)}
+                  max={100}
+                  height={96}
+                />
+              )}
+              <div className="flex items-center gap-4 text-[11px] text-[var(--text-secondary)] mt-3">
                 <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-[2px] bg-[var(--accent)]" /> Signed {totals.slides - totals.pending}
+                  <span className="w-2 h-2 rounded-full bg-[var(--accent)]" />
+                  Signed {totals.slides - totals.pending}
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-[2px] bg-[var(--skeleton-bg)] border border-[var(--border-subtle)]" /> Pending {totals.pending}
+                  <span className="w-2 h-2 rounded-full bg-[var(--skeleton-bg)] border border-[var(--border-subtle)]" />
+                  Pending {totals.pending}
                 </span>
               </div>
-            </div>
+            </Card>
 
             {/* The one accent card — deliberately the only saturated surface on
                 the page, so the eye lands on the outstanding work first. */}
-            <div className="rounded-[16px] p-5 flex flex-col justify-between" style={{ background: 'linear-gradient(145deg, var(--accent-bright) 0%, var(--accent-hover) 100%)' }}>
+            <div className="rounded-[20px] p-5 flex flex-col justify-between" style={{ background: 'linear-gradient(145deg, var(--accent-bright) 0%, var(--accent-hover) 100%)' }}>
               <div>
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-[13px] font-semibold text-[var(--accent-contrast)]/95">Needs a pathologist</p>
@@ -460,15 +460,15 @@ export default function TrialDashboard() {
             </div>
 
             {/* Portfolio split */}
-            <div className="rounded-[16px] border border-[var(--border-subtle)] bg-[var(--bg-card-solid)] p-5">
-              <p className="text-[13px] font-semibold mb-4">Portfolio</p>
+            <Card size="md" className="p-5">
+              <CardHeader title="Portfolio" />
               <div className="space-y-3">
                 <PortfolioRow label="Trials" value={totals.trials} />
                 <PortfolioRow label="Active" value={totals.active} accent="#34C759" />
                 <PortfolioRow label="Closed" value={totals.trials - totals.active} />
                 <PortfolioRow label="Open queries" value={totalOpenQueries} accent={totalOpenQueries > 0 ? '#FF9500' : undefined} />
               </div>
-            </div>
+            </Card>
           </div>
 
           {trials.length === 0 ? (
@@ -480,33 +480,29 @@ export default function TrialDashboard() {
             />
           ) : (
           <>
-          {/* Search + status filter */}
-          <div className="flex items-center gap-2 mb-3 flex-wrap">
-            <div className="relative flex-1 min-w-[220px]">
-              <Search className="w-3.5 h-3.5 text-[var(--text-secondary)] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          {/* Toolbar. Pill controls on the page ground rather than a boxed
+              filter bar — the search field is the one thing that has to be
+              wide, so it takes the row and the filters sit beside it. */}
+          <div className="flex items-center gap-2 mb-4 flex-wrap">
+            <div className="relative flex-1 min-w-[240px]">
+              <Search className="w-3.5 h-3.5 text-[var(--text-secondary)] absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by trial, sponsor, drug, or indication…"
-                className="w-full pl-9 pr-3 py-2 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[13px] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                placeholder="Search trials, sponsors, drugs…"
+                className="w-full pl-10 pr-4 py-2 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-card-solid)] text-[12.5px] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)] transition-colors"
               />
             </div>
-            <div className="flex items-center gap-1 p-1 rounded-[10px] bg-[var(--skeleton-bg)]">
-              {(['all', 'active', 'closed'] as const).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setStatusFilter(s)}
-                  className={
-                    'px-3 py-1.5 rounded-[8px] text-[12px] font-medium capitalize transition-colors ' +
-                    (statusFilter === s
-                      ? 'bg-[var(--bg-card-solid)] text-[var(--text-primary)] shadow-sm'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]')
-                  }
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
+            {(['all', 'active', 'closed'] as const).map((s) => (
+              <PillButton
+                key={s}
+                active={statusFilter === s}
+                onClick={() => setStatusFilter(s)}
+                className="capitalize"
+              >
+                {s}
+              </PillButton>
+            ))}
           </div>
 
           {visibleTrials.length === 0 ? (
@@ -566,7 +562,7 @@ function NavPill({ label, active, onClick }: { label: string; active?: boolean; 
 
 /** A single headline figure in the greeting strip. */
 /** One figure, in a card. */
-function StatCard({ icon: Icon, label, value, tone, sub }: {
+export function StatCard({ icon: Icon, label, value, tone, sub }: {
   icon: React.ElementType; label: string; value: number; tone?: string; sub?: string;
 }) {
   return (
@@ -591,7 +587,7 @@ function StatCard({ icon: Icon, label, value, tone, sub }: {
  * fields in a shape that fits, and puts the progress bar directly under the
  * counts it describes instead of three columns away.
  */
-function TrialCard({ trial, openQueries, writable, onOpen, onExport, onToggleStatus, onDelete }: {
+export function TrialCard({ trial, openQueries, writable, onOpen, onExport, onToggleStatus, onDelete }: {
   trial: Trial;
   openQueries: number;
   writable: boolean;

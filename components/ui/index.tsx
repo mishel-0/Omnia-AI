@@ -150,7 +150,7 @@ export function Pill({
 }
 
 const BUTTON_BASE =
-  'inline-flex items-center justify-center gap-2 font-semibold transition-all active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none';
+  'inline-flex items-center justify-center gap-2 font-semibold transition-colors disabled:opacity-40 disabled:pointer-events-none';
 
 export function Button({
   variant = 'primary',
@@ -181,6 +181,124 @@ export function Button({
     <button className={cn(BUTTON_BASE, sizes[size], variants[variant], className)} {...rest}>
       {children}
     </button>
+  );
+}
+
+/** A pill-shaped control — the toolbar/filter button of the reference design.
+ *
+ * Fully rounded, quiet surface, no press animation. The whole feedback
+ * vocabulary is a colour change, which is what Apple's own Health UI does; a
+ * control that shrinks under the cursor reads as a toy.
+ */
+export function PillButton({
+  icon: Icon,
+  active,
+  className,
+  children,
+  ...rest
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  icon?: React.ElementType;
+  active?: boolean;
+}) {
+  return (
+    <button
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[12.5px] font-medium',
+        'transition-colors whitespace-nowrap focus:outline-none',
+        'focus-visible:ring-2 focus-visible:ring-[var(--accent)]',
+        active
+          ? 'bg-[var(--accent)] text-[var(--accent-contrast)]'
+          : 'bg-[var(--bg-card-solid)] border border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-[var(--border-medium)]',
+        className,
+      )}
+      {...rest}
+    >
+      {Icon && <Icon className="w-3.5 h-3.5 shrink-0" />}
+      {children}
+    </button>
+  );
+}
+
+/** A card's title row, with an optional pill action on the right — the
+ *  "Health Report Pending / Report" and "My Doctor / See Details" pattern. */
+export function CardHeader({
+  title,
+  action,
+  className,
+}: {
+  title: React.ReactNode;
+  action?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn('flex items-center justify-between gap-3 mb-4', className)}>
+      <h3 className="text-[14px] font-semibold tracking-[-0.2px]">{title}</h3>
+      {action}
+    </div>
+  );
+}
+
+/** An area chart with a soft gradient fill.
+ *
+ * Values are plotted against a caller-supplied `max` rather than the data's own
+ * range. Auto-scaling to the data makes a two-point difference fill the card
+ * and read as a dramatic swing — the wrong impression for a clinical figure,
+ * where the size of a change is the thing being judged.
+ */
+export function AreaChart({
+  points,
+  max,
+  height = 96,
+  labels,
+  className,
+}: {
+  points: number[];
+  max: number;
+  height?: number;
+  labels?: string[];
+  className?: string;
+}) {
+  const id = React.useId();
+  if (points.length === 0) return null;
+
+  const w = 300, padT = 6, padB = labels?.length ? 18 : 6;
+  const plotH = height - padT - padB;
+  const top = Math.max(max, 1);
+  const x = (i: number) => points.length === 1 ? w / 2 : (i / (points.length - 1)) * w;
+  const y = (v: number) => padT + (1 - Math.min(v, top) / top) * plotH;
+
+  const line = points.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const area = `${x(0)},${padT + plotH} ${line} ${x(points.length - 1)},${padT + plotH}`;
+
+  return (
+    <svg viewBox={`0 0 ${w} ${height}`} className={cn('w-full', className)}
+         style={{ height }} preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <linearGradient id={`ac-${id}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.22" />
+          <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {[0, 0.5, 1].map((f) => (
+        <line key={f} x1="0" x2={w} y1={padT + f * plotH} y2={padT + f * plotH}
+              stroke="var(--border-subtle)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+      ))}
+      {points.length > 1 && <polygon points={area} fill={`url(#ac-${id})`} />}
+      <polyline
+        points={line}
+        fill="none"
+        stroke="var(--accent)"
+        strokeWidth="2"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      {points.map((v, i) => (
+        <circle key={i} cx={x(i)} cy={y(v)} r="3"
+                fill="var(--accent)" stroke="var(--bg-card-solid)" strokeWidth="2"
+                vectorEffect="non-scaling-stroke" />
+      ))}
+    </svg>
   );
 }
 

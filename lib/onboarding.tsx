@@ -344,7 +344,7 @@ function HelpLauncher({
           onClick={onOpen}
           title="Help & Guides"
           aria-label="Open help center"
-          className="fixed bottom-6 right-6 z-[220] w-12 h-12 rounded-full bg-[var(--accent)] text-white shadow-xl flex items-center justify-center hover:bg-[#0066D6] transition-colors hover:scale-105 active:scale-95"
+          className="fixed bottom-6 right-6 z-[220] w-12 h-12 rounded-full bg-[var(--accent)] text-[var(--accent-contrast)] shadow-xl flex items-center justify-center hover:bg-[var(--accent-hover)] transition-colors"
           style={{ boxShadow: '0 8px 24px var(--accent-border)' }}
         >
           <HelpCircle className="w-6 h-6" />

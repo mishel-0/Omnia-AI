@@ -78,7 +78,7 @@ export default function Home() {
           <span className="font-semibold text-[19px] tracking-[-0.3px]">Omnia Pathology AI</span>
         </div>
         <button onClick={toggleTheme}
-          className="w-[34px] h-[34px] rounded-full bg-[var(--skeleton-bg)] flex items-center justify-center hover:scale-105 transition-all duration-200"
+          className="w-[34px] h-[34px] rounded-full bg-[var(--skeleton-bg)] flex items-center justify-center transition-colors"
           title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>
           {theme === 'dark' ? <Sun className="w-[16px] h-[16px] text-[#FF9500]" /> : <Moon className="w-[16px] h-[16px] text-[var(--accent)]" />}
         </button>
@@ -131,7 +131,7 @@ export default function Home() {
             })();
             router.push(backendStatus === 'offline' || !setupDone ? '/install' : '/dashboard');
           }}
-          className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-contrast)] font-semibold py-[16px] px-8 rounded-[14px] shadow-lg shadow-[var(--accent-soft)] active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 text-[17px] tracking-[-0.3px]"
+          className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-contrast)] font-semibold py-[16px] px-8 rounded-[14px] shadow-lg shadow-[var(--accent-soft)] transition-colors flex items-center justify-center gap-2.5 text-[17px] tracking-[-0.3px]"
         >
           {backendStatus === 'offline' ? 'Install Diagnostics Engine' : 'Continue'}
           <ArrowRight className="w-[20px] h-[20px]" />

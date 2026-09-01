@@ -15,37 +15,58 @@ smoke-test and publish the macOS and Windows installers.
 
 ---
 
-## [Unreleased]
+## [1.3.0] — 2026-09-01
 
-### Security
+### Added
 
-- **The backend no longer publishes itself to the local network.** It bound
-  `0.0.0.0`, so a hospital LAN or guest Wi‑Fi could reach the clinical API —
-  verified against a shipped build from another address on the network. Nothing
-  needs off-machine access: the desktop shell health-checks `127.0.0.1` and the
-  bundled frontend was already pinned to loopback. It now binds `127.0.0.1`
-  unless `OMNIA_BIND_HOST` is set deliberately, which logs a warning. This
-  also closed the window in which `POST /api/users/bootstrap` — unauthenticated
-  by necessity, since it creates the *first* account — was reachable by anyone
-  on the network before the pathologist finished setup.
-- **CORS no longer accepts every origin.** `allow_origins=["*"]` with
-  credentials meant any web page the user had open could call the endpoints
-  that do not require a session. Restricted to the app's own frontend.
-- **`/api/system/preflight` requires a session once setup is complete.** It
-  returns absolute filesystem paths and a per-dependency map of the machine. It
-  stays open only while no account exists, because the setup wizard genuinely
-  cannot authenticate.
-- **`OMNIA_TEST_FAKE_GRADING` is refused in a packaged build.** The flag makes
-  grading return a fixed result without running the model, for the test suite.
-  It was honoured identically in the clinical build and surfaced nowhere — a
-  fabricated grade reached a signed PDF indistinguishable from a real one. It
-  is now ignored in a frozen build, and where it is honoured it is reported by
-  `/health`, fails preflight as fatal, and is logged.
-- **Session tokens are stored hashed, not in the clear.** Read access to the
-  data directory was previously direct account access. Expired sessions are
-  also pruned on every write instead of only when re-presented, which had let
-  `sessions.json` grow for the life of an installation. Existing sessions are
-  invalidated once by this change; users sign in again.
+- **Batch analysis.** Queue every unanalysed slide in a trial and work through
+  them one at a time behind the interactive path — a sponsor handing over 1,500
+  subjects is tens of thousands of slides, and clicking each one is not a
+  workflow. The queue is persisted, so a restart mid-cohort resumes: anything
+  left running by a dead process returns to pending rather than being dropped.
+  Progress counts every settled item including failures, so a bar does not
+  stall on a cohort where some slides cannot be read, and failures are named
+  rather than only counted.
+- **The Omnia Network.** A site can contribute its locally fine-tuned heads —
+  never the backbone, never patient data — to a shared model. Consent is
+  required and checked server-side, not merely gated by a disabled button, and
+  both the consent and the contribution are written to the audit trail.
+- **A light/dark switch inside the app.** The toggle existed but lived on the
+  setup screen, so once a pathologist reached the dashboard there was no way to
+  reach it — on software people sit in front of for a full shift, in rooms
+  whose lighting is not up to them.
+
+### Changed
+
+- **Analysis progress reports elapsed time instead of a fabricated
+  percentage.** The bar was driven by a 600 ms timer, not by the backend, and
+  its captions ("Segmenting tissue regions", "Assessing biomarkers") described
+  work the model does not do — grading is attention-MIL over sampled tiles. A
+  minimum delay also held finished results back so the captions could play. The
+  row now shows an indeterminate bar and the real elapsed seconds, and results
+  appear as soon as they exist.
+- Release publishing moved to a single job that runs after both platforms
+  build. The macOS and Windows jobs each created the same GitHub release in
+  parallel, which raced; worse, a Windows failure still left the macOS
+  installer published on its own.
+- Removed `OMNIA_MODEL_PATH`, which pointed every launch at
+  `aria_model_dicom.pth` — a checkpoint from the retired DICOM product, read by
+  nothing.
+
+- **Clinical sky blue replaces the iOS navy**, through tokens rather than the
+  literal hex that was hardcoded in 98 places and made the product
+  unrethemeable. Each theme carries the shade that reads on its own ground, and
+  the app icon is regenerated to match — including the .icns and .ico the
+  installers embed, not only the PNG.
+- **The dashboard and the patient profile are card-based.** The trial list was
+  a nine-column table needing horizontal scroll on a laptop; the patient page
+  was a nested list. Both now carry the same fields in cards, with an area
+  chart for review progress and pill controls for search and filtering. Logs
+  and the audit trail stay as tables, which is the right form for them.
+- **No press animations.** Buttons no longer shrink when clicked. Feedback is a
+  colour change; hover lift applies only to cards that are genuinely controls.
+- **Loading states mirror the layout they replace** rather than showing a
+  centred spinner that says nothing and then moves the page when data lands.
 
 ### Fixed
 
@@ -103,29 +124,46 @@ smoke-test and publish the macOS and Windows installers.
 - "Try Again" on the port-conflict dialog no longer re-enters startup without
   bound.
 
-### Changed
+### Security
 
-- **Analysis progress reports elapsed time instead of a fabricated
-  percentage.** The bar was driven by a 600 ms timer, not by the backend, and
-  its captions ("Segmenting tissue regions", "Assessing biomarkers") described
-  work the model does not do — grading is attention-MIL over sampled tiles. A
-  minimum delay also held finished results back so the captions could play. The
-  row now shows an indeterminate bar and the real elapsed seconds, and results
-  appear as soon as they exist.
-- Release publishing moved to a single job that runs after both platforms
-  build. The macOS and Windows jobs each created the same GitHub release in
-  parallel, which raced; worse, a Windows failure still left the macOS
-  installer published on its own.
-- Removed `OMNIA_MODEL_PATH`, which pointed every launch at
-  `aria_model_dicom.pth` — a checkpoint from the retired DICOM product, read by
-  nothing.
+- **The backend no longer publishes itself to the local network.** It bound
+  `0.0.0.0`, so a hospital LAN or guest Wi‑Fi could reach the clinical API —
+  verified against a shipped build from another address on the network. Nothing
+  needs off-machine access: the desktop shell health-checks `127.0.0.1` and the
+  bundled frontend was already pinned to loopback. It now binds `127.0.0.1`
+  unless `OMNIA_BIND_HOST` is set deliberately, which logs a warning. This
+  also closed the window in which `POST /api/users/bootstrap` — unauthenticated
+  by necessity, since it creates the *first* account — was reachable by anyone
+  on the network before the pathologist finished setup.
+- **CORS no longer accepts every origin.** `allow_origins=["*"]` with
+  credentials meant any web page the user had open could call the endpoints
+  that do not require a session. Restricted to the app's own frontend.
+- **`/api/system/preflight` requires a session once setup is complete.** It
+  returns absolute filesystem paths and a per-dependency map of the machine. It
+  stays open only while no account exists, because the setup wizard genuinely
+  cannot authenticate.
+- **`OMNIA_TEST_FAKE_GRADING` is refused in a packaged build.** The flag makes
+  grading return a fixed result without running the model, for the test suite.
+  It was honoured identically in the clinical build and surfaced nowhere — a
+  fabricated grade reached a signed PDF indistinguishable from a real one. It
+  is now ignored in a frozen build, and where it is honoured it is reported by
+  `/health`, fails preflight as fatal, and is logged.
+- **Session tokens are stored hashed, not in the clear.** Read access to the
+  data directory was previously direct account access. Expired sessions are
+  also pruned on every write instead of only when re-presented, which had let
+  `sessions.json` grow for the life of an installation. Existing sessions are
+  invalidated once by this change; users sign in again.
 
 ### Internal
 
-- Integration suite grown to **141 tests**, including seven that read a
-  generated PDF back and assert on what it renders. The promotion-gate guard
-  now tests the behaviour rather than grepping `finetune.py` for a literal line
-  of source, which failed for the refactor that fixed the gate's real defect.
+- Integration suite grown to **148 tests**, including seven that read a
+  generated PDF back and assert on what it renders, and seven covering the
+  batch queue. The promotion-gate guard now tests the behaviour rather than
+  grepping `finetune.py` for a literal line of source, which failed for the
+  refactor that fixed the gate's real defect.
+- A `/preview` route renders the dashboard's cards against synthetic data with
+  no API calls, so a visual change can be reviewed without a backend, an
+  account and seeded trials. It returns 404 in a production build.
 
 ## [1.2.3] — 2026-08-28
 
@@ -282,6 +320,7 @@ smoke-test and publish the macOS and Windows installers.
 - Desktop packaging: Electron shell with a PyInstaller-bundled backend.
 - Audit trail, electronic signatures and role-based access.
 
+[1.3.0]: https://github.com/mishel-0/Omnia-AI/releases/tag/v1.3.0
 [1.2.3]: https://github.com/mishel-0/Omnia-AI/releases/tag/v1.2.3
 [1.2.2]: https://github.com/mishel-0/Omnia-AI/releases/tag/v1.2.2
 [1.2.1]: https://github.com/mishel-0/Omnia-AI/releases/tag/v1.2.1
