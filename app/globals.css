@@ -532,6 +532,16 @@
 }
 .page-in { animation: page-in 0.26s cubic-bezier(0.32, 0.72, 0, 1); }
 
+/* The primary call to action. A flat accent fill disappears against the cards
+   on this page, which are already tinted with the same hue; the gradient gives
+   it a second colour so it reads as the one thing on the screen that acts. */
+.btn-gradient {
+  background: linear-gradient(135deg, var(--accent) 0%, #5856D6 100%);
+  color: #FFFFFF;
+  border: none;
+}
+.btn-gradient:hover { filter: brightness(1.06); }
+
 /* ── Control Centre ────────────────────────────────────────────────────────
    macOS groups its controls into rounded translucent modules rather than
    listing them as menu rows. The grouping is the information: things that
