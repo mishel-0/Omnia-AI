@@ -25,7 +25,7 @@ import {
 import { Card, Button, EmptyState, TableSkeleton } from '@/components/ui';
 import { apiFetch, apiSend } from '@/lib/auth';
 import { useToast } from '@/lib/toast';
-import { cn } from '@/lib/utils';
+import { cn, initials } from '@/lib/utils';
 
 interface AuditEvent {
   id: string;
@@ -425,7 +425,7 @@ function AuditRow({ event: e, role }: { event: AuditEvent; role?: string }) {
       <td className="px-4 py-3">
         <div className="flex items-center gap-2.5">
           <span className="w-8 h-8 rounded-full bg-[var(--accent-soft)] text-[var(--accent)] text-[11.5px] font-bold grid place-items-center shrink-0">
-            {(e.username || '?').trim().charAt(0).toUpperCase()}
+            {initials(e.username)}
           </span>
           <span className="min-w-0">
             <span className="block text-[12.5px] font-medium truncate">{e.username || 'system'}</span>

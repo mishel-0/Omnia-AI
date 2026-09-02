@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
 from backend.users import (
-    list_users, get_user, create_user, update_user, deactivate_user,
+    list_users, list_users_public, get_user, create_user, update_user, deactivate_user,
     authenticate, create_session, destroy_session, any_users_exist,
     verify_password_for_user, ROLES,
 )
@@ -91,7 +91,7 @@ def api_verify_password(req: VerifyPasswordRequest, user: dict = Depends(get_cur
 @router.get("/")
 def api_list_users(user: dict = Depends(get_current_user)):
     require_roles(user, "admin")
-    return list_users()
+    return list_users_public()
 
 
 @router.post("/")

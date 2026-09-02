@@ -22,7 +22,7 @@ import {
 import { useAuth, canWrite, ROLE_LABELS } from '@/lib/auth';
 import { useOnboarding } from '@/lib/onboarding';
 import { useTheme } from '@/lib/theme';
-import { cn } from '@/lib/utils';
+import { cn, initials } from '@/lib/utils';
 
 export default function TopBar({ actions }: { actions?: React.ReactNode }) {
   const router = useRouter();
@@ -114,7 +114,7 @@ export default function TopBar({ actions }: { actions?: React.ReactNode }) {
             className="flex items-center gap-2 pl-1.5 pr-2 py-1.5 rounded-full hover:bg-[var(--cc-tile-hover)] transition-colors"
           >
             <span className="w-7 h-7 rounded-full bg-[var(--accent-soft)] text-[var(--accent)] text-[11.5px] font-bold flex items-center justify-center">
-              {(user?.full_name || '?').trim().charAt(0).toUpperCase()}
+              {initials(user?.full_name)}
             </span>
             <span className="hidden md:block text-left leading-tight">
               <span className="block text-[12.5px] font-semibold">{user?.full_name}</span>
@@ -132,7 +132,7 @@ export default function TopBar({ actions }: { actions?: React.ReactNode }) {
             >
               <div className="flex items-center gap-2.5 px-1.5 pt-1 pb-2.5">
                 <span className="w-8 h-8 rounded-full bg-[var(--accent-soft)] text-[var(--accent)] text-[13px] font-bold flex items-center justify-center">
-                  {(user?.full_name || '?').trim().charAt(0).toUpperCase()}
+                  {initials(user?.full_name)}
                 </span>
                 <span className="leading-tight min-w-0">
                   <span className="block text-[13px] font-semibold truncate">{user?.full_name}</span>

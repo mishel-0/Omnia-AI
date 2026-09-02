@@ -1110,6 +1110,37 @@ check("TR6 an unknown status is rejected", s >= 400,
       f"an arbitrary status was accepted ({s})")
 
 
+print("\n=== US. USER ACCOUNTS ===")
+
+# last_login is stamped where the credential is accepted, so a rejected attempt
+# can never make a dormant account look like it is in use — which is exactly
+# what an access review would be reading this field to find out.
+s, _new = req("POST", "/api/users/", token=ADMIN,
+              body={"username": "dormant1", "password": "Dorm12345!",
+                    "full_name": "Dr Dormant One", "role": "pathologist"})
+check("US1 a new account has never signed in",
+      s == 200 and not _new.get("last_login"),
+      f"a brand-new account already carried a sign-in date: {_new.get('last_login')!r}")
+
+req("POST", "/api/users/login", body={"username": "dormant1", "password": "wrong-password"})
+s, _all = req("GET", "/api/users/", token=ADMIN)
+_d = next((u for u in _all if u.get("username") == "dormant1"), {})
+check("US2 a rejected sign-in does not stamp the date",
+      not _d.get("last_login"),
+      "a failed login moved last_login — a dormant account would look active")
+
+req("POST", "/api/users/login", body={"username": "dormant1", "password": "Dorm12345!"})
+s, _all = req("GET", "/api/users/", token=ADMIN)
+_d = next((u for u in _all if u.get("username") == "dormant1"), {})
+check("US3 an accepted sign-in stamps the date",
+      bool(_d.get("last_login")),
+      "a successful login left last_login empty")
+
+check("US4 the user list never exposes a password hash",
+      all("password_hash" not in u for u in _all),
+      "a password hash was returned to the client")
+
+
 print("\n" + "=" * 60)
 print(f"PASSED: {len(PASSES)}   FAILED: {len(FAILS)}")
 print("=" * 60)

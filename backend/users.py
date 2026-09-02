@@ -52,8 +52,27 @@ def _verify_password(password: str, stored: str) -> bool:
 # ─── Users ───
 
 def list_users() -> list:
+    """Every user record, password hash included. Internal use only.
+
+    Callers that hand results to a client must use list_users_public(). The two
+    are kept apart deliberately: the raw form is needed to verify a credential
+    and to write a record back, and a single function serving both purposes is
+    how the hash ends up on the wire.
+    """
     _init()
     return _read_json(USERS_FILE, [])
+
+
+def list_users_public() -> list:
+    """Every user, safe to send to a client.
+
+    The list endpoint returned raw records, so an administrator opening the
+    user-management screen was served every account's password hash. The hashes
+    are salted and stretched rather than plaintext, but a hash on the wire is a
+    hash that can be attacked offline at the attacker's leisure — and a screen
+    that lists people has no use for one.
+    """
+    return [_public(u) for u in list_users()]
 
 
 def get_user(user_id: str) -> Optional[dict]:
@@ -89,6 +108,9 @@ def create_user(username: str, password: str, full_name: str, role: str) -> dict
             "role": role,
             "password_hash": _hash_password(password),
             "active": True,
+            # Stamped on sign-in, never guessed. An account that has never been
+            # used shows as such rather than borrowing its creation date.
+            "last_login": "",
             "created": datetime.datetime.now().isoformat(),
         }
         users.append(user)
@@ -133,6 +155,14 @@ def authenticate(username: str, password: str) -> Optional[dict]:
         return None
     if not _verify_password(password, user["password_hash"]):
         return None
+    # Stamped here rather than at session creation: this is the point where the
+    # credential was accepted, so a failed attempt can never move the date and
+    # make a dormant account look like it is in use.
+    try:
+        update_user(user["id"], {"last_login": datetime.datetime.now().isoformat()})
+    except Exception:
+        # A clock or disk problem must not stop someone signing in.
+        pass
     return user
 
 
