@@ -44,7 +44,7 @@ export function Card({
   const radius = size === 'lg' ? 'rounded-[28px]' : size === 'sm' ? 'rounded-[16px]' : 'rounded-[20px]';
   return (
     <div
-      className={cn('health-card theme-transition', radius, className)}
+      className={cn('health-card', radius, className)}
       {...rest}
     >
       {children}

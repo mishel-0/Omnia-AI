@@ -11,7 +11,6 @@ import { useDialogs } from '@/lib/dialogs';
 import { cn } from '@/lib/utils';
 import CreateTrialDialog, { TrialDraft } from './components/CreateTrialDialog';
 import SystemHealth from './components/SystemHealth';
-import AppBar from './components/AppBar';
 
 export interface Trial {
   id: string;
@@ -227,14 +226,6 @@ export default function TrialDashboard() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
-      <AppBar
-        actions={writable ? (
-          <Button size="sm" onClick={() => setShowCreate(true)}>
-            <Plus className="w-3.5 h-3.5" />
-            New Trial
-          </Button>
-        ) : undefined}
-      />
 
       <SystemHealth />
 
@@ -391,6 +382,12 @@ export default function TrialDashboard() {
                 {s}
               </PillButton>
             ))}
+            {writable && (
+              <Button size="sm" onClick={() => setShowCreate(true)} className="rounded-full">
+                <Plus className="w-3.5 h-3.5" />
+                New Trial
+              </Button>
+            )}
           </div>
 
           {visibleTrials.length === 0 ? (

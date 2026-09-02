@@ -7,7 +7,6 @@ import { Card, Button, Pill, EmptyState, TableSkeleton } from '@/components/ui';
 import { apiFetch, apiSend, useAuth, ROLE_LABELS, Role } from '@/lib/auth';
 import { useToast } from '@/lib/toast';
 import { useDialogs } from '@/lib/dialogs';
-import AppBar from '../components/AppBar';
 
 interface ManagedUser {
   id: string;
@@ -90,7 +89,6 @@ export default function UsersPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
-      <AppBar />
         <div className="titlebar-inset border-b border-[var(--border-subtle)] pr-6 py-3.5 flex items-center justify-between bg-[var(--bg-card-solid)]">
           <div className="space-y-1.5">
             <div className="w-40 h-3.5 rounded-[4px] skeleton-shimmer" />

@@ -15,6 +15,47 @@ smoke-test and publish the macOS and Windows installers.
 
 ---
 
+## [1.4.0] — 2026-09-01
+
+### Added
+
+- **A Settings screen.** Appearance, licence, the model in use, network
+  configuration, version and intended use. Every row reflects state the
+  application actually holds — nothing here is a control that writes to
+  localStorage and changes no behaviour. It surfaces two things worth seeing
+  plainly: whether licence keys are signed with the published development
+  secret, and whether grading is real or fabricated.
+- **Appearance follows the system by default.** Three states rather than two:
+  with no stored preference the app tracks macOS, and choosing light or dark
+  pins it. "Follow system" restores the first by clearing the preference.
+- New interface primitives — `Toggle`, `Segmented`, `SettingGroup`,
+  `SettingRow`. `Toggle` is a real `<button role="switch">` rather than a
+  styled checkbox, so it announces its state and takes the space bar the way a
+  macOS control does.
+
+### Fixed
+
+- **Navigation existed on exactly one screen.** The section pills and the
+  account menu were defined inside the dashboard page, so opening Patients,
+  the audit trail, Users or Model lost both — and a packaged desktop app shows
+  no browser chrome, leaving no way back to another section at all. A shared
+  `AppBar` now mounts on every dashboard route, with the active section
+  derived from the URL rather than passed in. The account menu closes on
+  outside click and on Escape; a dropdown dismissable only by its own trigger
+  is a trap with no browser chrome to click into.
+
+### Changed
+
+- **The window chrome is frosted.** The glass tokens had existed since the
+  first commit and were applied to nothing — the top bar was a flat opaque
+  strip. It is now translucent and blurred, with a solid fallback wherever
+  `backdrop-filter` is unavailable, because a semi-transparent bar over live
+  content without blur is unreadable.
+- Motion uses the easing macOS uses for switches and sheets,
+  `cubic-bezier(0.32, 0.72, 0, 1)` — quick to leave, settling rather than
+  stopping. Menus scale out of their own corner. Every transition is bounded
+  by `prefers-reduced-motion`.
+
 ## [1.3.0] — 2026-09-01
 
 ### Added
@@ -320,6 +361,7 @@ smoke-test and publish the macOS and Windows installers.
 - Desktop packaging: Electron shell with a PyInstaller-bundled backend.
 - Audit trail, electronic signatures and role-based access.
 
+[1.4.0]: https://github.com/mishel-0/Omnia-AI/releases/tag/v1.4.0
 [1.3.0]: https://github.com/mishel-0/Omnia-AI/releases/tag/v1.3.0
 [1.2.3]: https://github.com/mishel-0/Omnia-AI/releases/tag/v1.2.3
 [1.2.2]: https://github.com/mishel-0/Omnia-AI/releases/tag/v1.2.2

@@ -18,7 +18,6 @@ import {
 import { apiFetch, useAuth, canWrite } from '@/lib/auth';
 import { useTheme, type Theme } from '@/lib/theme';
 import { useToast } from '@/lib/toast';
-import AppBar from '../components/AppBar';
 
 interface Health { version: string; status: string; grading_fabricated?: boolean; warning?: string }
 interface License {
@@ -78,7 +77,6 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
-      <AppBar />
 
       <div className="max-w-3xl mx-auto px-6 py-7">
         <h2 className="text-[26px] font-semibold tracking-[-0.5px] leading-tight">Settings</h2>

@@ -18,7 +18,6 @@ import {
 import { Card, Button, EmptyState, TableSkeleton } from '@/components/ui';
 import { apiFetch, apiSend } from '@/lib/auth';
 import { useToast } from '@/lib/toast';
-import AppBar from '../../components/AppBar';
 
 interface Slide {
   id: string;
@@ -302,7 +301,6 @@ export default function PatientContainerPage() {
 
   return (
     <div className="min-h-screen">
-      <AppBar />
       <div className="titlebar-drag titlebar-inset border-b border-[var(--border-subtle)] flex items-center gap-4 pr-6 py-3">
         <button
           onClick={() => router.push('/dashboard/patients')}

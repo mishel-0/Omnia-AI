@@ -6,7 +6,6 @@ import { ArrowLeft, Download, ScrollText, Filter } from 'lucide-react';
 import { Card, Button, EmptyState, TableSkeleton } from '@/components/ui';
 import { apiFetch } from '@/lib/auth';
 import { useToast } from '@/lib/toast';
-import AppBar from '../components/AppBar';
 
 interface AuditEvent {
   id: string;
@@ -84,7 +83,6 @@ export default function AuditPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
-      <AppBar />
         <div className="titlebar-inset border-b border-[var(--border-subtle)] pr-6 py-3.5 flex items-center justify-between bg-[var(--bg-card-solid)]">
           <div className="space-y-1.5">
             <div className="w-32 h-3.5 rounded-[4px] skeleton-shimmer" />

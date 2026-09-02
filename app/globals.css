@@ -267,8 +267,23 @@
   }
 
   /* Theme transition */
-  .theme-transition {
-    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+  /* Only while the theme is actually changing.
+     This used to sit permanently on the page root AND on every Card, so each
+     card carried a live 0.3s transition on background-color, color,
+     border-color and box-shadow — dozens of elements animating four
+     properties each, with box-shadow the most expensive of them to
+     composite. It also fought .health-card-interactive, which transitions
+     box-shadow at 0.18s, so hovering a card ran two competing animations on
+     the same property. Worse, the class rode on page roots that remount on
+     navigation, so every click replayed a 300ms cross-fade of the whole
+     screen — which is what made moving between sections feel slow.
+
+     lib/theme.tsx now stamps data-theme-changing on <html> for the length of
+     the switch and removes it, so the cross-fade happens when the theme
+     changes and at no other time. */
+  [data-theme-changing] * {
+    transition: background-color 0.3s ease, color 0.3s ease,
+                border-color 0.3s ease !important;
   }
 }
 

@@ -42,7 +42,16 @@ export function useTheme() {
 
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next);
-    document.documentElement.setAttribute('data-theme', next);
+    const root = document.documentElement;
+
+    // Cross-fade only for the length of the switch. The transition used to
+    // live permanently on the page root and on every card, which meant it
+    // also replayed on every navigation and made moving between sections feel
+    // slow. Stamping it here scopes it to the one moment it is wanted.
+    root.setAttribute('data-theme-changing', '');
+    root.setAttribute('data-theme', next);
+    window.setTimeout(() => root.removeAttribute('data-theme-changing'), 320);
+
     try { localStorage.setItem(KEY, next); } catch { /* nothing to do */ }
   }, []);
 
