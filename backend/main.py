@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse
 import traceback
 
 from backend.version import __version__
+from backend import audit
 from datetime import datetime, timezone
 
 app = FastAPI(title="Omnia AI — Pathology Clinical Trial Suite", version=__version__)
@@ -205,6 +206,24 @@ async def global_exception_handler(request: Request, exc: Exception):
     if os.environ.get("DEBUG"):
         return JSONResponse(status_code=500, content={"error": str(exc), "detail": traceback.format_exc()})
     return JSONResponse(status_code=500, content={"error": "Internal server error"})
+
+@app.middleware("http")
+async def _record_request_origin(request, call_next):
+    """Tell the audit trail where the request being served came from.
+
+    Deliberately reads request.client.host and not X-Forwarded-For. This
+    service binds to loopback by default and is meant to run on the
+    controller's own hardware; honouring a forwarding header here would let any
+    caller choose the address written into an audit record, which turns the one
+    field that attributes an action into the easiest field to falsify.
+    """
+    try:
+        audit.set_request_ip(request.client.host if request.client else "")
+    except Exception:
+        # Auditing must never break a request.
+        pass
+    return await call_next(request)
+
 
 # ─── Include Routers ─────────────────────────────────────────────────────
 from backend.routes import (

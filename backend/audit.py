@@ -6,6 +6,7 @@ only appended — so the log stays a trustworthy record of who did what and when
 """
 import os
 import uuid
+import contextvars
 import datetime
 from pathlib import Path
 from typing import Optional
@@ -25,6 +26,22 @@ def _read_json(path):
 
 def _write_json(path, data):
     write_json(path, data)
+
+
+# The network origin of whatever is currently being served.
+#
+# 21 CFR Part 11 §11.10(e) wants an audit trail that identifies the source of a
+# record, and until now an entry said who but never from where. Passing the
+# request down to every log_event call site would have meant touching all of
+# them, so this is a context variable set once per request by middleware and
+# read here. ContextVars propagate into Starlette's threadpool, so synchronous
+# endpoints see it too.
+_current_ip = contextvars.ContextVar("omnia_audit_ip", default="")
+
+
+def set_request_ip(ip: str):
+    """Record the origin of the request being served on this context."""
+    _current_ip.set(ip or "")
 
 
 def log_event(
@@ -49,6 +66,11 @@ def log_event(
             "entity_id": entity_id,
             "trial_id": trial_id,
             "details": details,
+            # Empty for anything not raised by an HTTP request — the background
+            # workers, migrations, startup recovery. Rendered as "—" rather
+            # than invented, and blank on every entry written before this
+            # field existed.
+            "ip": _current_ip.get(""),
         }
         # Guarded so concurrent actions cannot drop each other's audit entries —
         # a lost entry means the trail no longer reflects what actually happened.

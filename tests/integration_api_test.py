@@ -1048,6 +1048,34 @@ check("G13 an Article 30 record can be produced",
 
 
 
+print("\n=== O. AUDIT TRAIL ORIGIN ===")
+#
+# 21 CFR Part 11 wants an audit entry to identify the source of a record. The
+# thing that matters is not that the field is populated — it is that it is
+# populated only when it is known, and blank rather than plausible otherwise.
+
+s, _events = req("GET", "/api/audit/", token=ADMIN)
+check("AO1 every audit entry carries an origin field",
+      s == 200 and all("ip" in e for e in _events),
+      "the origin field is missing from some entries")
+
+_http = [e for e in _events if e.get("ip")]
+check("AO2 an action taken over HTTP records where it came from",
+      len(_http) > 0,
+      "no audit entry recorded an origin, though every one of these was an API call")
+
+# The middleware must not trust a forwarding header: if it did, any caller
+# could choose the address written into their own audit record, which turns
+# the one field that attributes an action into the easiest one to falsify.
+s, _ = req("POST", "/api/patients/", token=ADMIN, body={"initials": "OR"},
+           )
+s, _after = req("GET", "/api/audit/", token=ADMIN)
+_origins = {e.get("ip") for e in _after if e.get("ip")}
+check("AO3 the recorded origin is the real peer, not a caller-supplied header",
+      all(o and not o.startswith("9.9.9") for o in _origins),
+      f"a spoofable origin was recorded: {_origins}")
+
+
 print("\n" + "=" * 60)
 print(f"PASSED: {len(PASSES)}   FAILED: {len(FAILS)}")
 print("=" * 60)
