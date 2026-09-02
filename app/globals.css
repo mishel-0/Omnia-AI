@@ -44,6 +44,7 @@
     --card-shadow-raised: 0 2px 4px rgba(16, 24, 40, 0.06), 0 12px 28px rgba(16, 24, 40, 0.10);
     --switch-track: rgba(120, 120, 128, 0.16);
     --chrome-bg: rgba(255, 255, 255, 0.72);
+    --chrome-highlight: rgba(255, 255, 255, 0.85);
   }
 
   /* ── Theme: Dark ── */
@@ -84,6 +85,7 @@
     --card-shadow-raised: 0 4px 16px rgba(0, 0, 0, 0.48);
     --switch-track: rgba(120, 120, 128, 0.32);
     --chrome-bg: rgba(20, 20, 26, 0.68);
+    --chrome-highlight: rgba(255, 255, 255, 0.07);
   }
 
   body {
@@ -452,8 +454,12 @@
    -webkit- prefix stays: the packaged app runs on Electron's Chromium. */
 .glass-chrome {
   background: var(--chrome-bg);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  backdrop-filter: saturate(180%) blur(24px);
+  /* A frosted pane catches light along its top edge. Without this the bar is
+     just a blurred rectangle; with it the chrome reads as a physical layer
+     sitting above the content, which is the whole point of the effect. */
+  box-shadow: inset 0 1px 0 var(--chrome-highlight);
 }
 /* Without a fallback the bar would be semi-transparent over live content and
    unreadable anywhere backdrop-filter is unavailable. */
@@ -464,6 +470,60 @@
 /* The easing macOS uses for switches and sheets: quick to leave, settling
    rather than stopping. A linear transition over the same distance reads as
    mechanical, and that is most of what separates "animated" from "native". */
+/* ── The sliding section indicator ──────────────────────────────────────────
+   The nav highlight used to be a background colour on whichever button was
+   active: it vanished from one pill and appeared on the next, so moving
+   between sections read as two unrelated events rather than one movement.
+   This is a single element that travels, which is what makes the bar feel
+   like one object instead of six buttons.
+
+   It moves on transform and width only — both compositor properties — so the
+   travel costs nothing even while the incoming page is still rendering. */
+.nav-rail { position: relative; }
+
+.nav-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: 9999px;
+  background: var(--accent);
+  box-shadow: 0 1px 3px var(--accent-soft);
+  /* Distance and width settle together; easing is the macOS sheet curve. */
+  transition: transform 0.42s cubic-bezier(0.32, 0.72, 0, 1),
+              width     0.42s cubic-bezier(0.32, 0.72, 0, 1),
+              opacity   0.2s ease;
+  pointer-events: none;
+  will-change: transform, width;
+}
+
+/* ── Page transitions ──────────────────────────────────────────────────────
+   Keyed on the pathname, so each section fades up as it arrives. Deliberately
+   short and opacity/transform only: a page that animates its way in over half
+   a second stops feeling responsive and starts feeling slow, and anything
+   touching layout would animate the whole tree rather than one wrapper. */
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.page-in { animation: page-in 0.26s cubic-bezier(0.32, 0.72, 0, 1); }
+
+/* ── The theme switch ──────────────────────────────────────────────────────
+   Sun and moon occupy the same cell and trade places by rotating through it,
+   rather than one icon being swapped for another on click. */
+.theme-icon {
+  grid-area: 1 / 1;
+  transition: opacity 0.22s ease, transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.theme-icon[data-on="false"] { opacity: 0; transform: rotate(-90deg) scale(0.5); }
+.theme-icon[data-on="true"]  { opacity: 1; transform: rotate(0) scale(1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-indicator { transition: opacity 0.01ms; }
+  .page-in { animation: none; }
+  .theme-icon { transition: none; }
+}
+
 .ios-spring {
   transition-property: transform, background-color, box-shadow;
   transition-duration: 0.32s;

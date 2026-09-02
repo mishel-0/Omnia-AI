@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { BackendConnection } from '@/app/dashboard/components/BackendConnection';
 import AppBar from './components/AppBar';
 import AppErrorBoundary from '@/app/dashboard/components/AppErrorBoundary';
@@ -15,6 +15,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const [licenseValid, setLicenseValid] = useState(false);
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
+  const pathname = usePathname();
 
   useEffect(() => {
     const setupDone = (() => {
@@ -59,7 +60,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   return (
     <OnboardingProvider>
       <AppBar />
-      {children}
+      {/* Keyed on the path so React treats each section as a new element and
+          restarts the animation. The wrapper is what animates, not the page's
+          contents — one compositor-only fade on a single node, rather than a
+          transition on the hundreds of cards inside it. */}
+      <div key={pathname} className="page-in">
+        {children}
+      </div>
     </OnboardingProvider>
   );
 }

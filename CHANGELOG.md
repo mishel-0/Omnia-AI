@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.5.0 — 2026-09-02
+
+### The navigation bar
+
+- The section highlight is now a single indicator that travels between
+  sections and resizes to the one it lands on, instead of a background colour
+  that disappeared from one pill and reappeared on the next. It moves on
+  transform and width only, so the travel does not compete with the incoming
+  page for the main thread.
+- Light and dark mode is a switch in the bar. It was previously three
+  interactions deep, inside the account menu, for something people change as
+  the light in the room changes. The sun and moon share one cell and rotate
+  past each other rather than being swapped.
+- The frosted chrome gained the hairline highlight along its top edge that
+  makes a translucent bar read as a pane above the content rather than a
+  blurred rectangle.
+- Sections fade up as they arrive. One wrapper element animates, keyed on the
+  path — not the cards inside it.
+
+### Fixed
+
+- The indicator's first-paint guard used requestAnimationFrame, which does not
+  fire while a window is hidden or fully occluded. An app launched behind
+  another window would keep its transition disabled for the whole session and
+  the indicator would snap between sections instead of travelling.
+
 All notable changes to Omnia Pathology AI are recorded here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),

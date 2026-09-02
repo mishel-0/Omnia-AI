@@ -11,7 +11,7 @@
  * passed in, so it cannot disagree with the page you are actually on.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   ChevronDown, LogOut, ShieldCheck, ScrollText, Users as UsersIcon,
@@ -73,6 +73,51 @@ export default function AppBar({ actions }: { actions?: React.ReactNode }) {
 
   const visible = SECTIONS.filter((s) => s.show(user?.role, writable));
 
+  // Where the travelling indicator should sit. Measured from the DOM rather
+  // than computed from label lengths, because the only thing that knows how
+  // wide "Audit Trail" renders is the browser that just laid it out.
+  const navRef = useRef<HTMLElement>(null);
+  const [ind, setInd] = useState<{ x: number; w: number } | null>(null);
+  const [ready, setReady] = useState(false);
+
+  const measure = useCallback(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const el = nav.querySelector<HTMLElement>('[data-active="true"]');
+    // No match means a route with no section of its own — a patient detail
+    // page, say. Fading the indicator out is honest; parking it under an
+    // unrelated tab would claim you are somewhere you are not.
+    if (!el) { setInd(null); return; }
+    setInd({ x: el.offsetLeft - nav.scrollLeft, w: el.offsetWidth });
+  }, []);
+
+  // Layout effect, not effect: this runs before paint, so the indicator is
+  // already in the right place on the first frame after a navigation.
+  useLayoutEffect(() => {
+    measure();
+    const nav = navRef.current;
+    if (!nav) return;
+    // Re-measure on anything that can move a pill: the window resizing, the
+    // nav scrolling when it overflows, or a webfont landing late and changing
+    // every label's width after we already measured.
+    const ro = new ResizeObserver(measure);
+    ro.observe(nav);
+    nav.querySelectorAll('button').forEach((b) => ro.observe(b));
+    nav.addEventListener('scroll', measure, { passive: true });
+    document.fonts?.ready.then(measure).catch(() => { /* no font API */ });
+    return () => { ro.disconnect(); nav.removeEventListener('scroll', measure); };
+  }, [measure, pathname, visible.length]);
+
+  // Deliberately a timer rather than requestAnimationFrame. rAF does not fire
+  // while the window is hidden or fully occluded, so an app launched behind
+  // another window would sit with its transition disabled forever and the
+  // indicator would snap between sections instead of travelling. A timer still
+  // runs when the window is not being painted.
+  useEffect(() => {
+    const t = window.setTimeout(() => setReady(true), 60);
+    return () => window.clearTimeout(t);
+  }, []);
+
   return (
     <header className="titlebar-drag titlebar-inset sticky top-0 z-40 glass-chrome border-b border-[var(--border-subtle)] pr-6 py-2.5 flex items-center justify-between gap-4">
       <div className="flex items-center gap-2.5 shrink-0">
@@ -83,7 +128,26 @@ export default function AppBar({ actions }: { actions?: React.ReactNode }) {
         </div>
       </div>
 
-      <nav className="titlebar-no-drag flex items-center gap-0.5 min-w-0 overflow-x-auto no-scrollbar">
+      <nav
+        ref={navRef}
+        className="nav-rail titlebar-no-drag flex items-center gap-0.5 min-w-0 overflow-x-auto no-scrollbar"
+      >
+        {/* One element that travels between sections, drawn behind the labels.
+            Hidden from assistive tech: `aria-current` on the button already
+            says which section is active, and a decorative box repeating it
+            would be read out as noise. */}
+        <span
+          aria-hidden
+          className="nav-indicator"
+          style={{
+            transform: `translateX(${ind?.x ?? 0}px)`,
+            width: ind?.w ?? 0,
+            opacity: ind ? 1 : 0,
+            // Suppressed for the very first paint, otherwise the indicator
+            // visibly flies in from the left edge on every cold load.
+            transition: ready ? undefined : 'none',
+          }}
+        />
         {visible.map((s) => (
           <NavPill
             key={s.href}
@@ -96,6 +160,7 @@ export default function AppBar({ actions }: { actions?: React.ReactNode }) {
 
       <div className="titlebar-no-drag flex items-center gap-2 shrink-0">
         {actions}
+        <ThemeSwitch theme={theme} onToggle={toggleTheme} />
         <div className="relative" ref={menuRef}>
           <button
             onClick={() => setMenu((v) => !v)}
@@ -156,15 +221,43 @@ function NavPill({ label, active, onClick }: { label: string; active?: boolean; 
     <button
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
+      data-active={active ? 'true' : 'false'}
       className={cn(
-        'px-3.5 py-1.5 rounded-full text-[12.5px] font-medium whitespace-nowrap',
+        // relative + z-10 keeps the label above the indicator that slides
+        // beneath it; the active pill draws no background of its own, because
+        // the indicator is the background.
+        'relative z-10 px-3.5 py-1.5 rounded-full text-[12.5px] font-medium whitespace-nowrap',
         'transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]',
         active
-          ? 'bg-[var(--accent)] text-[var(--accent-contrast)]'
+          ? 'text-[var(--accent-contrast)]'
           : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--skeleton-bg)]',
       )}
     >
       {label}
+    </button>
+  );
+}
+
+/** Light/dark, one click, always visible.
+ *
+ * This was reachable only by opening the account menu and finding an
+ * "Appearance" row — three interactions to do something people do twice a day
+ * as the light in the room changes. */
+function ThemeSwitch({ theme, onToggle }: { theme: string; onToggle: () => void }) {
+  const dark = theme === 'dark';
+  return (
+    <button
+      onClick={onToggle}
+      role="switch"
+      aria-checked={dark}
+      aria-label="Dark mode"
+      title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+      className="grid place-items-center w-8 h-8 rounded-full text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--skeleton-bg)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+    >
+      {/* Both icons stay mounted in the same grid cell and rotate past each
+          other, so the change is one movement rather than a swap. */}
+      <Sun className="theme-icon w-4 h-4" data-on={dark ? 'true' : 'false'} />
+      <Moon className="theme-icon w-4 h-4" data-on={dark ? 'false' : 'true'} />
     </button>
   );
 }
