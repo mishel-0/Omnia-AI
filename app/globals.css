@@ -45,6 +45,7 @@
     --switch-track: rgba(120, 120, 128, 0.16);
     --chrome-bg: rgba(255, 255, 255, 0.72);
     --chrome-highlight: rgba(255, 255, 255, 0.85);
+    --sidebar-bg: #FFFFFF;
     --cc-module: rgba(120, 120, 128, 0.08);
     --cc-tile-hover: rgba(120, 120, 128, 0.14);
   }
@@ -88,6 +89,7 @@
     --switch-track: rgba(120, 120, 128, 0.32);
     --chrome-bg: rgba(20, 20, 26, 0.68);
     --chrome-highlight: rgba(255, 255, 255, 0.07);
+    --sidebar-bg: #16161C;
     --cc-module: rgba(255, 255, 255, 0.06);
     --cc-tile-hover: rgba(255, 255, 255, 0.12);
   }
@@ -501,6 +503,24 @@
   will-change: transform, width;
 }
 
+/* The rail's indicator is the same object as the bar's, turned on its side:
+   it travels on transform and height rather than transform and width. A soft
+   accent tint rather than a solid fill, because at this size a saturated block
+   behind the label fights the label. */
+.nav-indicator-v {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 0;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  transition: transform 0.42s cubic-bezier(0.32, 0.72, 0, 1),
+              height    0.42s cubic-bezier(0.32, 0.72, 0, 1),
+              opacity   0.2s ease;
+  pointer-events: none;
+  will-change: transform, height;
+}
+
 /* ── Page transitions ──────────────────────────────────────────────────────
    Keyed on the pathname, so each section fades up as it arrives. Deliberately
    short and opacity/transform only: a page that animates its way in over half
@@ -549,7 +569,7 @@
 .theme-icon[data-on="true"]  { opacity: 1; transform: rotate(0) scale(1); }
 
 @media (prefers-reduced-motion: reduce) {
-  .nav-indicator { transition: opacity 0.01ms; }
+  .nav-indicator, .nav-indicator-v { transition: opacity 0.01ms; }
   .page-in { animation: none; }
   .theme-icon { transition: none; }
 }

@@ -82,10 +82,10 @@ export default function DashboardPreview() {
         </p>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
-          <StatCard icon={Users} label="Patients" value={totals.patients} />
-          <StatCard icon={Layers} label="Slides analysed" value={totals.slides} />
-          <StatCard icon={ScrollText} label="Awaiting review" value={totals.pending} tone="#FF9500" />
-          <StatCard icon={FlaskConical} label="Active trials" value={totals.active} sub={`of ${totals.trials}`} />
+          <StatCard icon={Users} label="Patients" value={totals.patients} tone="#5856D6" sub="Total patients" />
+          <StatCard icon={Layers} label="Slides analysed" value={totals.slides} tone="var(--accent)" sub="Total slides" />
+          <StatCard icon={ScrollText} label="Awaiting review" value={totals.pending} tone="#FF9500" sub="Slides" />
+          <StatCard icon={FlaskConical} label="Active trials" value={totals.active} tone="#34C759" sub={`of ${totals.trials} in progress`} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-5">

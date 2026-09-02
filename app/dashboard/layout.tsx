@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { BackendConnection } from '@/app/dashboard/components/BackendConnection';
-import AppBar from './components/AppBar';
+import Sidebar from './components/Sidebar';
+import TopBar from './components/TopBar';
 import AppErrorBoundary from '@/app/dashboard/components/AppErrorBoundary';
 import { useAuth } from '@/lib/auth';
 import { OnboardingProvider } from '@/lib/onboarding';
@@ -55,17 +56,23 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // AppBar sits inside the providers but outside {children}, so it is mounted
-  // once for the whole dashboard segment and survives every navigation.
+  // The rail and the header sit inside the providers but outside {children},
+  // so they are mounted once for the whole dashboard segment and survive every
+  // navigation — only the page below them swaps.
   return (
     <OnboardingProvider>
-      <AppBar />
+      <div className="flex min-h-screen bg-[var(--bg-primary)]">
+        <Sidebar />
+        <div className="flex-1 min-w-0 flex flex-col">
+          <TopBar />
       {/* Keyed on the path so React treats each section as a new element and
           restarts the animation. The wrapper is what animates, not the page's
           contents — one compositor-only fade on a single node, rather than a
           transition on the hundreds of cards inside it. */}
-      <div key={pathname} className="page-in">
-        {children}
+          <div key={pathname} className="page-in flex-1 min-w-0">
+            {children}
+          </div>
+        </div>
       </div>
     </OnboardingProvider>
   );

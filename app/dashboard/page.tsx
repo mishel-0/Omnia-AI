@@ -202,7 +202,7 @@ export default function TrialDashboard() {
             then the trial grid — so nothing shifts position when the data
             arrives. A centred spinner would tell the reader nothing about
             what is coming and then move everything on load. */}
-        <div className="max-w-6xl mx-auto px-6 pt-7">
+        <div className="max-w-[1200px] px-7 pt-7">
           <Skeleton className="h-6 w-64 rounded-[6px]" />
           <Skeleton className="h-3 w-80 rounded-[4px] mt-2.5" />
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
@@ -234,7 +234,7 @@ export default function TrialDashboard() {
           widget. Hiding it until a trial exists meant a fresh install showed
           nothing but an empty state, so the dashboard looked unchanged on
           exactly the screen a new user sees first. Zero is a valid figure. */}
-      <div className="max-w-6xl mx-auto px-6 pt-7 pb-1">
+      <div className="max-w-[1200px] px-7 pt-7 pb-1">
         <h2 className="text-[26px] font-semibold tracking-[-0.5px] leading-tight">
           {greeting}, <span className="text-[var(--accent)]">{displayName}</span>
         </h2>
@@ -252,25 +252,29 @@ export default function TrialDashboard() {
             surface on this page is a card, and the header was the one place
             that broke the grid. */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
-          <StatCard icon={Users} label="Patients" value={totals.patients} />
-          <StatCard icon={Layers} label="Slides analysed" value={totals.slides} />
+          <StatCard icon={Users} label="Patients" value={totals.patients}
+                    tone="#5856D6" sub="Total patients" />
+          <StatCard icon={Layers} label="Slides analysed" value={totals.slides}
+                    tone="var(--accent)" sub="Total slides" />
           <StatCard
             icon={ScrollText}
             label="Awaiting review"
             value={totals.pending}
-            tone={totals.pending > 0 ? '#FF9500' : undefined}
+            tone="#FF9500"
+            sub="Slides"
           />
           <StatCard
             icon={FlaskConical}
             label="Active trials"
             value={totals.active}
-            sub={totals.trials !== totals.active ? `of ${totals.trials}` : undefined}
+            tone="#34C759"
+            sub={totals.trials !== totals.active ? `of ${totals.trials} in progress` : 'In progress'}
           />
         </div>
       </div>
 
       {/* Trial List */}
-      <div className="max-w-6xl mx-auto px-6 py-6">
+      <div className="max-w-[1200px] px-7 py-6">
           {/* Overview row. Three cards: what is done, what needs a person,
               and how the portfolio is split. */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-5">
@@ -434,16 +438,27 @@ export default function TrialDashboard() {
 export function StatCard({ icon: Icon, label, value, tone, sub }: {
   icon: React.ElementType; label: string; value: number; tone?: string; sub?: string;
 }) {
+  // The badge carries the colour so the figure does not have to. A big number
+  // painted orange reads as an alarm even when it is only a count; the tint
+  // behind the icon distinguishes the cards without shouting.
+  const accent = tone || 'var(--accent)';
   return (
-    <Card size="sm" className="p-4">
-      <div className="flex items-center gap-1.5 mb-2">
-        <Icon className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
-        <span className="text-[11.5px] font-medium text-[var(--text-secondary)] truncate">{label}</span>
-      </div>
-      <p className="text-[26px] font-semibold tabular-nums leading-none" style={{ color: tone }}>
-        {value.toLocaleString()}
-        {sub && <span className="text-[12px] font-medium text-[var(--text-secondary)] ml-1.5">{sub}</span>}
-      </p>
+    <Card size="md" className="p-4 flex items-center gap-3.5">
+      <span
+        className="w-11 h-11 rounded-[14px] grid place-items-center shrink-0"
+        style={{ background: `color-mix(in srgb, ${accent} 12%, transparent)` }}
+      >
+        <Icon className="w-[18px] h-[18px]" style={{ color: accent }} />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-[12px] font-medium text-[var(--text-secondary)] truncate">{label}</span>
+        <span className="block text-[26px] font-semibold tabular-nums leading-tight">
+          {value.toLocaleString()}
+        </span>
+        {sub && (
+          <span className="block text-[11px] text-[var(--text-secondary)] truncate">{sub}</span>
+        )}
+      </span>
     </Card>
   );
 }
