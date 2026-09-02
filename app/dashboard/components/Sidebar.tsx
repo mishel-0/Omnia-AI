@@ -24,7 +24,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Users as UsersIcon, ScrollText, GraduationCap, Settings as SettingsIcon,
-  ChevronRight, LifeBuoy, Sun, Moon, ChevronsUpDown,
+  ChevronRight, LifeBuoy, Sun, Moon, ChevronsUpDown, FlaskConical,
 } from 'lucide-react';
 import { BrandMark } from '@/components/ui';
 import { useAuth, canWrite } from '@/lib/auth';
@@ -39,10 +39,10 @@ interface Item {
   show: (role?: string, writable?: boolean) => boolean;
 }
 
-// Deliberately not a copy of the reference layout's item list. That mockup
-// carries a "Trials" entry, and there is no trials route — trials are the
-// dashboard's own content. A nav item that goes nowhere, or lands on a page
-// the user is already looking at, is worse than one fewer item.
+// Trials earns its place here now that /dashboard/trials exists. It was left
+// out while the only trial list was the dashboard's own content, because an
+// item that lands you on the page you are already looking at is worse than one
+// fewer item.
 const PRIMARY: Item[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, show: () => true },
 ];
@@ -51,6 +51,7 @@ const CLINICAL: Item[] = [
   { label: 'Patients', href: '/dashboard/patients', icon: UsersIcon, show: () => true },
   { label: 'Audit Trail', href: '/dashboard/audit', icon: ScrollText,
     show: (r) => r === 'admin' || r === 'monitor' },
+  { label: 'Trials', href: '/dashboard/trials', icon: FlaskConical, show: () => true },
 ];
 
 const SYSTEM: Item[] = [

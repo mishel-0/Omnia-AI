@@ -1076,6 +1076,40 @@ check("AO3 the recorded origin is the real peer, not a caller-supplied header",
       f"a spoofable origin was recorded: {_origins}")
 
 
+print("\n=== TR. TRIAL STATUS AND END DATE ===")
+
+s, _tr = req("POST", "/api/trials/", token=ADMIN,
+             body={"name": "TR-STATUS", "sponsor": "S", "drug": "D",
+                   "indication": "Prostate cancer", "phase": "Phase II"})
+_TRID = _tr.get("id", "")
+check("TR1 a new trial carries no end date",
+      not _tr.get("ended"),
+      f"a trial that has not ended was given an end date: {_tr.get('ended')!r}")
+
+s, _hold = req("POST", f"/api/trials/{_TRID}/status", token=ADMIN, body={"status": "on_hold"})
+check("TR2 a trial can be suspended without being closed",
+      s == 200 and _hold.get("status") == "on_hold",
+      f"on_hold was rejected ({s}) — a study paused by a monitoring committee "
+      f"would have to be recorded as finished")
+check("TR3 a suspended trial still has no end date",
+      not _hold.get("ended"),
+      "suspending a trial stamped an end date it has not reached")
+
+s, _closed = req("POST", f"/api/trials/{_TRID}/status", token=ADMIN, body={"status": "closed"})
+check("TR4 closing a trial stamps the end date",
+      s == 200 and bool(_closed.get("ended")),
+      "closing left no end date, so the date would have to be typed from memory later")
+
+s, _re = req("POST", f"/api/trials/{_TRID}/status", token=ADMIN, body={"status": "active"})
+check("TR5 reopening clears the end date",
+      s == 200 and not _re.get("ended"),
+      "a reopened trial kept an end date it has not reached")
+
+s, _bad = req("POST", f"/api/trials/{_TRID}/status", token=ADMIN, body={"status": "finished"})
+check("TR6 an unknown status is rejected", s >= 400,
+      f"an arbitrary status was accepted ({s})")
+
+
 print("\n" + "=" * 60)
 print(f"PASSED: {len(PASSES)}   FAILED: {len(FAILS)}")
 print("=" * 60)
