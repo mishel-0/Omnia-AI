@@ -45,6 +45,8 @@
     --switch-track: rgba(120, 120, 128, 0.16);
     --chrome-bg: rgba(255, 255, 255, 0.72);
     --chrome-highlight: rgba(255, 255, 255, 0.85);
+    --cc-module: rgba(120, 120, 128, 0.08);
+    --cc-tile-hover: rgba(120, 120, 128, 0.14);
   }
 
   /* ── Theme: Dark ── */
@@ -86,6 +88,8 @@
     --switch-track: rgba(120, 120, 128, 0.32);
     --chrome-bg: rgba(20, 20, 26, 0.68);
     --chrome-highlight: rgba(255, 255, 255, 0.07);
+    --cc-module: rgba(255, 255, 255, 0.06);
+    --cc-tile-hover: rgba(255, 255, 255, 0.12);
   }
 
   body {
@@ -507,6 +511,32 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 .page-in { animation: page-in 0.26s cubic-bezier(0.32, 0.72, 0, 1); }
+
+/* ── Control Centre ────────────────────────────────────────────────────────
+   macOS groups its controls into rounded translucent modules rather than
+   listing them as menu rows. The grouping is the information: things that
+   belong together sit on one tile, and the eye reads three modules faster
+   than nine identical lines. */
+.cc-panel {
+  background: var(--chrome-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(30px);
+  backdrop-filter: saturate(180%) blur(30px);
+  border: 1px solid var(--border-subtle);
+  box-shadow: inset 0 1px 0 var(--chrome-highlight), var(--card-shadow-raised);
+}
+.cc-module {
+  background: var(--cc-module);
+  border-radius: 14px;
+}
+.cc-tile {
+  border-radius: 12px;
+  transition: background-color 0.15s ease;
+}
+.cc-tile:hover { background: var(--cc-tile-hover); }
+.cc-tile[data-on="true"] {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
 
 /* ── The theme switch ──────────────────────────────────────────────────────
    Sun and moon occupy the same cell and trade places by rotating through it,

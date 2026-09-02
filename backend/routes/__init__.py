@@ -9,3 +9,4 @@ from backend.routes.audit import router as audit_router
 from backend.routes.queries import router as queries_router
 from backend.routes.training import router as training_router
 from backend.routes.batch import router as batch_router
+from backend.routes.gdpr import router as gdpr_router

@@ -16,7 +16,7 @@ import {
   ShieldCheck, Download, Users, Activity, Microscope, Ruler, TrendingUp,
 } from 'lucide-react';
 import { Card, Button, EmptyState, TableSkeleton } from '@/components/ui';
-import { apiFetch, apiSend } from '@/lib/auth';
+import { apiFetch, apiSend, useAuth } from '@/lib/auth';
 import { useToast } from '@/lib/toast';
 
 interface Slide {
@@ -248,6 +248,7 @@ export default function PatientContainerPage() {
   const params = useParams();
   const uid = String(params?.uid || '');
   const toast = useToast();
+  const { user } = useAuth();
 
   const load = useCallback(async () => {
     try {
@@ -538,6 +539,17 @@ export default function PatientContainerPage() {
               </div>
             )}
 
+            {/* Data-subject rights sit with the patient they concern, not
+                buried in a settings screen: the person handling a request is
+                looking at this record when they handle it. */}
+            <div className="mt-6 mb-8">
+              <DataProtectionCard
+                uid={uid}
+                isAdmin={user?.role === 'admin'}
+                onChanged={() => { setLoading(true); load(); }}
+              />
+            </div>
+
             {/* Reports */}
             <SectionHeading icon={FileText} title="Reports on file" count={data.reports.length} />
             {data.reports.length === 0 ? (
@@ -615,5 +627,102 @@ function MiniStat({ label, text }: { label: string; text: string }) {
       <p className="text-[10px] uppercase tracking-[0.4px] text-[var(--text-secondary)]">{label}</p>
       <p className="text-[12.5px] font-medium tabular-nums">{text}</p>
     </div>
+  );
+}
+
+
+/** Article 15, 17 and 20, for one subject.
+ *
+ * Admin-only, because the endpoints are: exporting hands over a complete
+ * personal record and erasing destroys one, and neither should be a click away
+ * for every coordinator with an account.
+ *
+ * The interesting case is the refusal. Erasure is blocked while a subject has
+ * electronically signed slides or sits in a running trial, and a refusal a
+ * coordinator cannot understand is a refusal they will work around — so the
+ * Article and the blocking trials are shown, along with the operation that
+ * *is* available. "Operation failed" would be the worst possible answer here.
+ */
+export function DataProtectionCard({ uid, isAdmin, onChanged }: {
+  uid: string; isAdmin: boolean; onChanged: () => void;
+}) {
+  const toast = useToast();
+  const [busy, setBusy] = useState('');
+  const [refusal, setRefusal] = useState<
+    { message: string; article: string; trials_blocking: string[] } | null
+  >(null);
+
+  if (!isAdmin) return null;
+
+  const exportSubject = async () => {
+    setBusy('export');
+    try {
+      const r = await apiFetch(`/api/gdpr/subjects/${encodeURIComponent(uid)}/export`);
+      if (!r.ok) throw new Error(String(r.status));
+      const blob = new Blob([JSON.stringify(await r.json(), null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `subject-${uid}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast.show('Subject record exported');
+    } catch {
+      toast.show('Could not export this subject.', 'error');
+    } finally { setBusy(''); }
+  };
+
+  const act = async (op: 'redact' | 'erase') => {
+    setBusy(op);
+    setRefusal(null);
+    try {
+      const r = await apiFetch(`/api/gdpr/subjects/${encodeURIComponent(uid)}/${op}`, { method: 'POST' });
+      if (r.status === 409) {
+        // Not an error to swallow — it is the answer, and it has content.
+        setRefusal((await r.json()).detail);
+        return;
+      }
+      if (!r.ok) throw new Error(String(r.status));
+      toast.show(op === 'erase' ? 'Subject erased' : 'Identifiers cleared');
+      onChanged();
+    } catch {
+      toast.show(`Could not ${op} this subject.`, 'error');
+    } finally { setBusy(''); }
+  };
+
+  return (
+    <Card size="sm" className="p-4">
+      <h3 className="text-[11px] font-semibold uppercase tracking-[0.6px] text-[var(--text-secondary)] mb-1">
+        Data protection
+      </h3>
+      <p className="text-[11.5px] text-[var(--text-secondary)] leading-relaxed mb-3">
+        Redaction clears every identifier and leaves the measurements a trial’s
+        conclusions rest on. Erasure additionally destroys the container, and is
+        refused while anything lawfully requires the record to be kept.
+      </p>
+
+      {refusal && (
+        <div className="rounded-[10px] border border-[#FF9500]/30 bg-[#FF9500]/10 p-3 mb-3">
+          <p className="text-[12px] leading-relaxed">{refusal.message}</p>
+          <p className="text-[11px] text-[var(--text-secondary)] mt-1.5">{refusal.article}</p>
+          {refusal.trials_blocking?.length > 0 && (
+            <p className="text-[11px] text-[var(--text-secondary)] mt-1">
+              Blocking: {refusal.trials_blocking.join(', ')}
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        <Button variant="secondary" size="sm" disabled={!!busy} onClick={exportSubject}>
+          {busy === 'export' ? 'Exporting…' : 'Export record'}
+        </Button>
+        <Button variant="secondary" size="sm" disabled={!!busy} onClick={() => act('redact')}>
+          {busy === 'redact' ? 'Redacting…' : 'Redact identifiers'}
+        </Button>
+        <Button variant="danger" size="sm" disabled={!!busy} onClick={() => act('erase')}>
+          {busy === 'erase' ? 'Erasing…' : 'Erase subject'}
+        </Button>
+      </div>
+    </Card>
   );
 }

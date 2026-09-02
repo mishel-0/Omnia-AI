@@ -956,6 +956,98 @@ check("V4 a saturated engine is retried rather than shown as an error",
       "Retry-After" in _trial_page and "503" in _trial_page,
       "the frontend still ignores the backend's retryable busy response")
 
+print("\n=== G. DATA-SUBJECT RIGHTS (GDPR) ===")
+# ─── Data-subject rights (GDPR) ────────────────────────────────────────────
+#
+# These endpoints hand over and destroy personal records, so the tests that
+# matter are the refusals, not the happy path.
+
+s, _path_login = req("POST", "/api/users/login", body={"username": "path1", "password": "Path12345!"})
+PATH_TOKEN = _path_login.get("token", "")
+
+s, _subj = req("POST", "/api/patients/", token=ADMIN,
+               body={"initials": "GD", "year_of_birth": 1962, "sex": "male",
+                     "site": "Vilnius", "notes": "a private note"})
+G_UID = _subj.get("uid", "")
+
+s, _ = req("GET", f"/api/gdpr/subjects/{G_UID}/export", token=ADMIN)
+check("G1 an administrator can export a subject record", s == 200,
+      f"export returned {s}")
+
+s, _ = req("GET", f"/api/gdpr/subjects/{G_UID}/export", token=PATH_TOKEN)
+check("G2 a non-administrator cannot export a subject record", s == 403,
+      f"a pathologist got {s} instead of 403 — subject access must be admin-only")
+
+s, _ = req("GET", f"/api/gdpr/subjects/{G_UID}/export")
+check("G3 subject export requires authentication", s in (401, 403),
+      f"an anonymous caller got {s}")
+
+# The export is itself a disclosure. Answering one subject-access request with
+# another subject's processing history would be a breach, not a feature.
+s, _export = req("GET", f"/api/gdpr/subjects/{G_UID}/export", token=ADMIN)
+_other_uids = {p["uid"] for p in (req("GET", "/api/patients/", token=ADMIN)[1] or [])
+               if p.get("uid") != G_UID}
+_history = json.dumps(_export.get("processing_history", []))
+check("G4 a subject export contains only that subject's history",
+      not any(u in _history for u in _other_uids),
+      "another subject's audit entries leaked into a subject-access response")
+
+# Redaction must clear identifiers without touching the measurements.
+s, _ = req("POST", f"/api/gdpr/subjects/{G_UID}/redact?reason=test", token=ADMIN)
+s, _after = req("GET", f"/api/patients/{G_UID}", token=ADMIN)
+check("G5 redaction clears every direct identifier",
+      s == 200 and _after.get("initials") == "" and _after.get("notes") == ""
+      and _after.get("site") == "" and _after.get("year_of_birth") is None,
+      f"identifiers survived redaction: {_after}")
+check("G6 redaction is recorded on the record itself",
+      _after.get("redacted") is True,
+      "the redaction flag was dropped — update_patient whitelists fields")
+
+# A subject carrying a signed slide cannot be erased: the signature is part of
+# the regulatory record. The refusal must explain itself.
+s, _sub2 = req("POST", "/api/patients/", token=ADMIN, body={"initials": "HJ"})
+S_UID = _sub2.get("uid", "")
+s, _v = req("POST", f"/api/trials/{TID}/patients", token=ADMIN, body={"patient_id": S_UID})
+_VID = _v.get("id", "")
+s, _ = req("PATCH", f"/api/trials/patients/{_VID}", token=ADMIN,
+           body={"slides": [{"id": "sg1", "confirmed": True, "grade_group": 2}]})
+s, _refusal = req("POST", f"/api/gdpr/subjects/{S_UID}/erase?reason=test", token=ADMIN)
+check("G7 erasure is refused while a signed slide exists", s == 409,
+      f"erasure returned {s} — a signed grade must survive erasure")
+_detail = (_refusal or {}).get("detail", {})
+check("G8 the refusal cites the Article and offers the alternative",
+      isinstance(_detail, dict) and "Article" in str(_detail.get("article", ""))
+      and _detail.get("alternative") == "redact",
+      f"the refusal gave no usable reason: {_detail}")
+
+# A clean subject erases, and the tombstone proves it without naming anyone.
+s, _erase = req("POST", f"/api/gdpr/subjects/{G_UID}/erase?reason=test", token=ADMIN)
+_stone = (_erase or {}).get("tombstone", {})
+check("G9 a subject with nothing blocking is erased", s == 200 and _stone.get("complete") is True,
+      f"erase returned {s}: {_erase}")
+check("G10 the tombstone records the erasure without personal data",
+      "GD" not in json.dumps(_stone) and "private note" not in json.dumps(_stone)
+      and _stone.get("uid") == G_UID,
+      f"the tombstone leaked personal data: {_stone}")
+
+s, _ = req("GET", f"/api/gdpr/subjects/{G_UID}/export", token=ADMIN)
+check("G11 an erased subject reads as gone, not as never-existing", s == 410,
+      f"export of an erased subject returned {s} — a controller must be able "
+      f"to show the erasure happened")
+
+s, _ret = req("GET", "/api/gdpr/retention", token=ADMIN)
+check("G12 the retention position is reportable",
+      s == 200 and isinstance(_ret.get("retention_years"), int) and _ret["retention_years"] > 0,
+      f"retention returned {s}: {_ret}")
+
+s, _a30 = req("GET", "/api/gdpr/processing-activities", token=ADMIN)
+check("G13 an Article 30 record can be produced",
+      s == 200 and "special_category" in json.dumps(_a30)
+      and "limits_of_this_record" in _a30,
+      "the processing record is missing its Article 9 category or its own caveat")
+
+
+
 print("\n" + "=" * 60)
 print(f"PASSED: {len(PASSES)}   FAILED: {len(FAILS)}")
 print("=" * 60)
@@ -963,6 +1055,7 @@ if FAILS:
     print("\nBUGS FOUND:")
     for n, d in FAILS:
         print(f"  * {n}\n      {d}")
+
 
 _stop_server()
 sys.exit(1 if FAILS else 0)

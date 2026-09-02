@@ -42,6 +42,43 @@ export default function SettingsPage() {
   // Follow-the-system is a third state, not a second one: with no stored
   // preference the app tracks the OS. Choosing light or dark pins it.
   const [followSystem, setFollowSystem] = useState(false);
+  const [retention, setRetention] = useState<{ retention_years: number; overdue_count: number } | null>(null);
+  const [erasures, setErasures] = useState<unknown[]>([]);
+  const [gdprLoading, setGdprLoading] = useState(true);
+  const isAdmin = user?.role === 'admin';
+
+  // Admin-only, and the endpoints refuse anyone else — so a non-admin must not
+  // even ask. A 403 in the console on every settings visit trains people to
+  // ignore the console, which is where the real problems show up.
+  useEffect(() => {
+    if (!isAdmin) { setGdprLoading(false); return; }
+    let live = true;
+    Promise.all([
+      apiFetch('/api/gdpr/retention').then(r => r.ok ? r.json() : null).catch(() => null),
+      apiFetch('/api/gdpr/erasures').then(r => r.ok ? r.json() : null).catch(() => null),
+    ]).then(([ret, era]) => {
+      if (!live) return;
+      setRetention(ret);
+      setErasures(era?.erasures ?? []);
+      setGdprLoading(false);
+    });
+    return () => { live = false; };
+  }, [isAdmin]);
+
+  const downloadArt30 = useCallback(async () => {
+    try {
+      const r = await apiFetch('/api/gdpr/processing-activities');
+      if (!r.ok) throw new Error(String(r.status));
+      const blob = new Blob([JSON.stringify(await r.json(), null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'omnia-processing-activities.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      toast.show('Could not generate the processing record.', 'error');
+    }
+  }, [toast]);
   useEffect(() => {
     try { setFollowSystem(!localStorage.getItem('omnia_theme')); } catch { /* storage off */ }
   }, []);
@@ -204,6 +241,51 @@ export default function SettingsPage() {
             </>
           )}
         </SettingGroup>
+
+        {isAdmin && (
+          <SettingGroup
+            title="Data protection"
+            footnote="Subject access and erasure are administrator-only, and every request is written to the audit trail. Handling a request is itself processing, and processing that leaves no trace cannot be shown to a regulator."
+          >
+            {gdprLoading ? <RowSkeleton /> : (
+              <>
+                <SettingRow
+                  title="Retention period"
+                  description={`Records older than this are listed for review under Article 5(1)(e). They are never deleted automatically — erasing clinical data on a timer is how a sponsor loses a dataset they were required to keep.`}
+                  control={<Value>{retention?.retention_years ?? '—'} years</Value>}
+                />
+                <SettingRow
+                  title="Held past retention"
+                  description={retention?.overdue_count
+                    ? 'These subjects are due a retention review.'
+                    : 'Nothing is being held longer than the configured period.'}
+                  control={<Pill accent={retention?.overdue_count ? 'orange' : 'green'}>
+                    {retention?.overdue_count ?? 0}
+                  </Pill>}
+                />
+                <SettingRow
+                  title="Erasures honoured"
+                  description="Each erasure leaves a tombstone recording that it happened, when, by whom and how much went — but nothing about the person. Article 17 requires you to be able to demonstrate the erasure, not merely to have performed it."
+                  control={<Value>{erasures.length}</Value>}
+                />
+                <SettingRow
+                  title="Records of processing"
+                  description="What this software does with personal data, in Article 30 terms. Your own identity, DPO and transfers still have to be added by you — software cannot know them."
+                  control={
+                    <Button variant="secondary" size="sm" onClick={downloadArt30}>
+                      Download
+                    </Button>
+                  }
+                />
+                <SettingRow
+                  title="Special category data"
+                  description="Histopathology images and grades are health data under Article 9(1). Subjects are pseudonymous here: no name and no full date of birth are stored, and the identity mapping stays with the treating site."
+                  control={<Pill accent="blue">Art. 9</Pill>}
+                />
+              </>
+            )}
+          </SettingGroup>
+        )}
 
         <SettingGroup title="About">
           {loading ? <RowSkeleton /> : (

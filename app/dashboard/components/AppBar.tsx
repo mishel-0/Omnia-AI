@@ -17,7 +17,7 @@ import {
   ChevronDown, LogOut, ShieldCheck, ScrollText, Users as UsersIcon,
   BookOpen, GraduationCap, Sun, Moon, Settings,
 } from 'lucide-react';
-import { Card, BrandMark } from '@/components/ui';
+import { BrandMark } from '@/components/ui';
 import { useAuth, canWrite, ROLE_LABELS } from '@/lib/auth';
 import { useOnboarding } from '@/lib/onboarding';
 import { useTheme } from '@/lib/theme';
@@ -44,7 +44,7 @@ export default function AppBar({ actions }: { actions?: React.ReactNode }) {
   const { user, logout } = useAuth();
   const writable = canWrite(user?.role);
   const { open: openGuide } = useOnboarding();
-  const { theme, toggle: toggleTheme } = useTheme();
+  const { theme, setTheme, toggle: toggleTheme } = useTheme();
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -181,34 +181,62 @@ export default function AppBar({ actions }: { actions?: React.ReactNode }) {
           </button>
 
           {menu && (
-            <Card size="sm" className="absolute right-0 top-[calc(100%+8px)] w-[212px] z-50 p-1.5 shadow-xl animate-menu-in origin-top-right">
-              <MenuItem icon={Settings} label="Settings" onClick={() => { setMenu(false); router.push('/dashboard/settings'); }} />
-              {(user?.role === 'admin' || user?.role === 'monitor') && (
-                <MenuItem icon={ScrollText} label="Audit Trail" onClick={() => { setMenu(false); router.push('/dashboard/audit'); }} />
-              )}
-              {user?.role === 'admin' && (
-                <MenuItem icon={UsersIcon} label="Manage Users" onClick={() => { setMenu(false); router.push('/dashboard/users'); }} />
-              )}
-              {writable && (
-                <MenuItem icon={GraduationCap} label="Model Training" onClick={() => { setMenu(false); router.push('/dashboard/training'); }} />
-              )}
-              <MenuItem icon={BookOpen} label="Guide & Help" onClick={() => { setMenu(false); openGuide(); }} />
-              <MenuItem icon={ShieldCheck} label="System Health" onClick={() => { setMenu(false); router.push('/admin'); }} />
-              {/* Stays open: appearance is judged by looking at the result. */}
-              <MenuItem
-                icon={theme === 'dark' ? Sun : Moon}
-                label="Appearance"
-                trailing={<span className="text-[11px] text-[var(--text-secondary)] capitalize">{theme}</span>}
-                onClick={toggleTheme}
-              />
-              <div className="h-px bg-[var(--border-subtle)] my-1" />
-              <MenuItem
-                icon={LogOut}
-                label="Sign Out"
-                danger
+            <div
+              role="menu"
+              className="cc-panel absolute right-0 top-[calc(100%+10px)] w-[288px] z-50 p-2.5 rounded-[20px] animate-menu-in origin-top-right"
+            >
+              {/* Who you are signed in as. Control Centre always says whose
+                  machine it is before it offers to change anything on it. */}
+              <div className="flex items-center gap-2.5 px-1.5 pt-1 pb-2.5">
+                <span className="w-8 h-8 rounded-full bg-[var(--accent-soft)] text-[var(--accent)] text-[13px] font-bold flex items-center justify-center">
+                  {(user?.full_name || '?').trim().charAt(0).toUpperCase()}
+                </span>
+                <span className="leading-tight min-w-0">
+                  <span className="block text-[13px] font-semibold truncate">{user?.full_name}</span>
+                  <span className="block text-[11px] text-[var(--text-secondary)]">
+                    {ROLE_LABELS[user?.role as keyof typeof ROLE_LABELS] ?? user?.role}
+                  </span>
+                </span>
+              </div>
+
+              {/* Appearance is a module of its own, because it is the one
+                  control here that changes something you can see immediately
+                  rather than taking you somewhere else. */}
+              <div className="cc-module p-2.5 mb-2">
+                <p className="text-[10.5px] font-semibold uppercase tracking-[0.5px] text-[var(--text-secondary)] mb-2">
+                  Appearance
+                </p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <CCTile icon={Sun}  label="Light" on={theme === 'light'} onClick={() => setTheme('light')} />
+                  <CCTile icon={Moon} label="Dark"  on={theme === 'dark'}  onClick={() => setTheme('dark')} />
+                </div>
+              </div>
+
+              {/* Everywhere else you can go. One module, so the panel reads as
+                  two groups rather than a list of eight. */}
+              <div className="cc-module p-1.5 mb-2">
+                <CCRow icon={Settings} label="Settings" onClick={() => { setMenu(false); router.push('/dashboard/settings'); }} />
+                {(user?.role === 'admin' || user?.role === 'monitor') && (
+                  <CCRow icon={ScrollText} label="Audit Trail" onClick={() => { setMenu(false); router.push('/dashboard/audit'); }} />
+                )}
+                {user?.role === 'admin' && (
+                  <CCRow icon={UsersIcon} label="Manage Users" onClick={() => { setMenu(false); router.push('/dashboard/users'); }} />
+                )}
+                {writable && (
+                  <CCRow icon={GraduationCap} label="Model Training" onClick={() => { setMenu(false); router.push('/dashboard/training'); }} />
+                )}
+                <CCRow icon={BookOpen} label="Guide & Help" onClick={() => { setMenu(false); openGuide(); }} />
+                <CCRow icon={ShieldCheck} label="System Health" onClick={() => { setMenu(false); router.push('/admin'); }} />
+              </div>
+
+              <button
                 onClick={async () => { setMenu(false); await logout(); router.push('/login'); }}
-              />
-            </Card>
+                className="cc-tile w-full flex items-center gap-2 px-2.5 py-2 text-[12.5px] text-[#FF3B30] hover:bg-[#FF3B30]/10"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                Sign Out
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -262,28 +290,39 @@ function ThemeSwitch({ theme, onToggle }: { theme: string; onToggle: () => void 
   );
 }
 
-function MenuItem({ icon: Icon, label, onClick, danger, trailing }: {
-  icon: React.ElementType;
-  label: string;
-  onClick: () => void;
-  danger?: boolean;
-  trailing?: React.ReactNode;
+/** A Control Centre tile: a chunky, tappable square that shows its own state.
+ *  Selected is a filled tile, not a tick in a margin. */
+function CCTile({ icon: Icon, label, on, onClick }: {
+  icon: React.ElementType; label: string; on?: boolean; onClick: () => void;
 }) {
   return (
     <button
       onClick={onClick}
+      data-on={on ? 'true' : 'false'}
+      aria-pressed={on}
       className={cn(
-        'w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-[8px] text-[12px] text-left transition-colors',
-        danger
-          ? 'hover:bg-[#FF3B30]/10 text-[#FF3B30]'
-          : 'hover:bg-[var(--skeleton-bg)]',
+        'cc-tile flex flex-col items-start gap-1.5 px-2.5 py-2 text-[11.5px] font-medium',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]',
+        !on && 'text-[var(--text-secondary)]',
       )}
     >
-      <span className="flex items-center gap-2">
-        <Icon className={cn('w-3.5 h-3.5', !danger && 'text-[var(--text-secondary)]')} />
-        {label}
-      </span>
-      {trailing}
+      <Icon className="w-4 h-4" />
+      {label}
+    </button>
+  );
+}
+
+/** A row inside a Control Centre module. */
+function CCRow({ icon: Icon, label, onClick }: {
+  icon: React.ElementType; label: string; onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="cc-tile w-full flex items-center gap-2.5 px-2.5 py-2 text-[12.5px] text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+    >
+      <Icon className="w-3.5 h-3.5 text-[var(--text-secondary)] shrink-0" />
+      {label}
     </button>
   );
 }
