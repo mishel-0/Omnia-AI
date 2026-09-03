@@ -176,7 +176,7 @@ export default function PatientRegistry() {
           because it is an explanation, and an explanation you cannot put away
           after reading it becomes furniture. */}
       {notice && (
-        <div className="flex items-start gap-3 rounded-[14px] border border-[var(--border-subtle)] bg-[var(--bg-card-solid)] px-4 py-3.5 mb-5">
+        <div className="flex items-start gap-3 rounded-[22px] border border-[var(--border-subtle)] bg-[var(--bg-card-solid)] px-4 py-3.5 mb-5">
           <span className="w-7 h-7 rounded-full bg-[#34C759]/12 grid place-items-center shrink-0">
             <ShieldCheck className="w-4 h-4 text-[#34C759]" />
           </span>
@@ -221,7 +221,7 @@ export default function PatientRegistry() {
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search by patient ID, initials, or site…"
-                className="w-full pl-11 pr-4 py-3 rounded-[14px] border border-[var(--border-subtle)] bg-[var(--bg-card-solid)] text-[13px] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)] transition-colors"
+                className="w-full pl-11 pr-4 py-3 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-card-solid)] text-[13px] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)] transition-colors"
               />
             </div>
 
@@ -230,7 +230,7 @@ export default function PatientRegistry() {
                 onClick={() => setShowFilters(v => !v)}
                 aria-expanded={showFilters}
                 className={cn(
-                  'inline-flex items-center gap-2 px-4 py-3 rounded-[14px] border text-[13px] font-medium transition-colors',
+                  'inline-flex items-center gap-2 px-4 py-3 rounded-full border text-[13px] font-medium transition-colors',
                   activeFilters
                     ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--accent-soft)]'
                     : 'border-[var(--border-subtle)] bg-[var(--bg-card-solid)] hover:border-[var(--border-medium)]',
@@ -244,7 +244,7 @@ export default function PatientRegistry() {
               </button>
 
               {showFilters && (
-                <div className="cc-panel absolute right-0 top-[calc(100%+8px)] w-[240px] z-40 p-3 rounded-[16px] animate-menu-in origin-top-right">
+                <div className="cc-panel absolute right-0 top-[calc(100%+8px)] w-[240px] z-40 p-3 rounded-[20px] animate-menu-in origin-top-right">
                   <FilterField label="Sex" value={sexFilter} onChange={setSexFilter}
                                options={[['', 'Any'], ['male', 'Male'], ['female', 'Female'], ['other', 'Other']]} />
                   {sites.length > 0 && (
@@ -357,7 +357,7 @@ function PageBtn({ children, ...rest }: React.ButtonHTMLAttributes<HTMLButtonEle
   return (
     <button
       {...rest}
-      className="grid place-items-center w-8 h-8 rounded-[10px] border border-[var(--border-subtle)] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] hover:border-[var(--border-medium)] disabled:opacity-40 disabled:pointer-events-none"
+      className="grid place-items-center w-8 h-8 rounded-full border border-[var(--border-subtle)] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] hover:border-[var(--border-medium)] disabled:opacity-40 disabled:pointer-events-none"
     >
       {children}
     </button>
@@ -447,14 +447,14 @@ function PatientRow({ patient: p, onOpen }: { patient: Patient; onOpen: () => vo
           onClick={e => { e.stopPropagation(); setMenu(v => !v); }}
           aria-label="Actions"
           aria-expanded={menu}
-          className="inline-grid place-items-center w-8 h-8 rounded-[10px] border border-[var(--border-subtle)] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] hover:border-[var(--border-medium)]"
+          className="inline-grid place-items-center w-8 h-8 rounded-full border border-[var(--border-subtle)] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] hover:border-[var(--border-medium)]"
         >
           <MoreHorizontal className="w-4 h-4" />
         </button>
         {menu && (
           <div
             onClick={e => e.stopPropagation()}
-            className="cc-panel absolute right-5 top-[calc(100%-4px)] w-[184px] z-40 p-1.5 rounded-[14px] animate-menu-in origin-top-right text-left"
+            className="cc-panel absolute right-5 top-[calc(100%-4px)] w-[184px] z-40 p-1.5 rounded-[18px] animate-menu-in origin-top-right text-left"
           >
             <button onClick={onOpen}
                     className="cc-tile w-full flex items-center gap-2.5 px-2.5 py-2 text-[12.5px]">

@@ -131,7 +131,7 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="titlebar-drag w-[264px] shrink-0 h-screen sticky top-0 flex flex-col bg-[var(--sidebar-bg)] border-r border-[var(--border-subtle)]">
+    <aside className="titlebar-drag shell-panel w-[264px] shrink-0 h-[calc(100vh-20px)] sticky top-2.5 flex flex-col rounded-[26px] overflow-hidden">
       {/* items-end parks the brand at the foot of the titlebar zone, so the
           window buttons macOS draws over the top-left have the space above it
           to themselves. pl-6 puts the mark on the same left edge as the
@@ -168,7 +168,7 @@ export default function Sidebar() {
       <div className="titlebar-no-drag px-3 pb-3 space-y-2">
         <button
           onClick={openGuide}
-          className="w-full flex items-center gap-2.5 rounded-[12px] border border-[var(--border-subtle)] px-3 py-2.5 text-left transition-colors hover:bg-[var(--cc-tile-hover)]"
+          className="w-full flex items-center gap-2.5 rounded-full border border-[var(--border-subtle)] px-3.5 py-2.5 text-left transition-colors hover:bg-[var(--cc-tile-hover)]"
         >
           <span className="w-7 h-7 rounded-full bg-[var(--accent-soft)] text-[var(--accent)] grid place-items-center shrink-0">
             <LifeBuoy className="w-3.5 h-3.5" />
@@ -196,7 +196,7 @@ function NavItem({ item, active, onClick }: { item: Item; active?: boolean; onCl
       className={cn(
         // relative + z-10 keeps the label above the indicator sliding beneath
         // it; the active item paints no background of its own.
-        'relative z-10 w-full flex items-center gap-2.5 rounded-[12px] px-3 py-2.5 text-[13px] font-medium',
+        'relative z-10 w-full flex items-center gap-2.5 rounded-full px-3.5 py-2.5 text-[13px] font-medium',
         'transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]',
         active
           ? 'text-[var(--accent)]'
@@ -221,7 +221,7 @@ function ThemeSelect() {
   const { theme, setTheme } = useTheme();
   const Icon = theme === 'dark' ? Moon : Sun;
   return (
-    <label className="relative flex items-center gap-2.5 rounded-[12px] border border-[var(--border-subtle)] px-3 py-2.5 cursor-pointer transition-colors hover:bg-[var(--cc-tile-hover)]">
+    <label className="relative flex items-center gap-2.5 rounded-full border border-[var(--border-subtle)] px-3.5 py-2.5 cursor-pointer transition-colors hover:bg-[var(--cc-tile-hover)]">
       <Icon className="w-4 h-4 text-[var(--text-secondary)] shrink-0" />
       <span className="text-[12.5px] font-medium capitalize">{theme}</span>
       <ChevronsUpDown className="w-3.5 h-3.5 text-[var(--text-secondary)] ml-auto shrink-0" />

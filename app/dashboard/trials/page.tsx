@@ -176,7 +176,7 @@ export default function TrialsPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search by trial name, protocol code, sponsor, or drug…"
-            className="w-full pl-11 pr-4 py-3 rounded-[14px] border border-[var(--border-subtle)] bg-[var(--bg-card-solid)] text-[13px] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)] transition-colors"
+            className="w-full pl-11 pr-4 py-3 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-card-solid)] text-[13px] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)] transition-colors"
           />
         </div>
         <SelectControl icon={Filter} value={status} onChange={v => setStatus(v as '' | Status)}
@@ -296,7 +296,7 @@ function SelectControl({ icon: Icon, value, onChange, options }: {
 }) {
   const label = options.find(([v]) => v === value)?.[1] ?? options[0]?.[1] ?? '';
   return (
-    <label className="relative inline-flex items-center gap-2 px-4 py-3 rounded-[14px] border border-[var(--border-subtle)] bg-[var(--bg-card-solid)] text-[13px] font-medium cursor-pointer transition-colors hover:border-[var(--border-medium)]">
+    <label className="relative inline-flex items-center gap-2 px-4 py-3 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-card-solid)] text-[13px] font-medium cursor-pointer transition-colors hover:border-[var(--border-medium)]">
       <Icon className="w-4 h-4 text-[var(--text-secondary)] shrink-0" />
       <span className="whitespace-nowrap">{label}</span>
       <SlidersHorizontal className="w-3.5 h-3.5 text-[var(--text-secondary)] shrink-0" />
@@ -326,7 +326,7 @@ function Pagination({ page, pageCount, onPage }: {
       ) : (
         <button key={n} onClick={() => onPage(n)} aria-current={n === page ? 'page' : undefined}
           className={cn(
-            'min-w-8 h-8 px-2 rounded-[10px] text-[12px] tabular-nums font-medium transition-colors border',
+            'min-w-8 h-8 px-2 rounded-full text-[12px] tabular-nums font-medium transition-colors border',
             n === page
               ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
               : 'border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-medium)]',
@@ -344,7 +344,7 @@ function Pagination({ page, pageCount, onPage }: {
 function PageBtn({ children, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button {...rest}
-      className="grid place-items-center w-8 h-8 rounded-[10px] border border-[var(--border-subtle)] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] hover:border-[var(--border-medium)] disabled:opacity-40 disabled:pointer-events-none">
+      className="grid place-items-center w-8 h-8 rounded-full border border-[var(--border-subtle)] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] hover:border-[var(--border-medium)] disabled:opacity-40 disabled:pointer-events-none">
       {children}
     </button>
   );
@@ -421,13 +421,13 @@ function TrialRow({ trial: t, writable, onOpen, onStatus }: {
           onClick={e => { e.stopPropagation(); setMenu(v => !v); }}
           aria-label="Trial actions"
           aria-expanded={menu}
-          className="inline-grid place-items-center w-8 h-8 rounded-[10px] border border-[var(--border-subtle)] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] hover:border-[var(--border-medium)]"
+          className="inline-grid place-items-center w-8 h-8 rounded-full border border-[var(--border-subtle)] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] hover:border-[var(--border-medium)]"
         >
           <MoreHorizontal className="w-4 h-4" />
         </button>
         {menu && (
           <div onClick={e => e.stopPropagation()}
-               className="cc-panel absolute right-5 top-[calc(100%-4px)] w-[200px] z-40 p-1.5 rounded-[14px] animate-menu-in origin-top-right text-left">
+               className="cc-panel absolute right-5 top-[calc(100%-4px)] w-[200px] z-40 p-1.5 rounded-[18px] animate-menu-in origin-top-right text-left">
             <button onClick={onOpen} className="cc-tile w-full flex items-center gap-2.5 px-2.5 py-2 text-[12.5px]">
               <FlaskConical className="w-3.5 h-3.5 text-[var(--text-secondary)]" /> Open trial
             </button>

@@ -9,8 +9,20 @@
     --bg-primary: #F2F2F7;
     --bg-card: rgba(255, 255, 255, 0.8);
     --bg-card-solid: #FFFFFF;
+    /* Frosted surfaces. A card is translucent enough to pick up the ground
+       behind it without the text on it losing contrast — the figures on these
+       cards are the point of the screen, so the glass stops well short of the
+       fashionable 0.4. */
+    --glass-card: rgba(255, 255, 255, 0.72);
+    --glass-edge: rgba(255, 255, 255, 0.9);
+    --shell-bg: #E9E9F0;
     --text-primary: #1C1C1E;
-    --text-secondary: #8E8E93;
+    /* Not #8E8E93. Apple's system grey is 3.26:1 on white — under the 4.5
+       needed for normal text, and this token labels every figure on the
+       dashboard and every column in every table. Measured at 4.91:1 here,
+       still visibly muted against the primary. The shortfall predates the
+       frosted surfaces; those cost 0.11 of it. */
+    --text-secondary: #6E6E73;
     --border-subtle: rgba(0, 0, 0, 0.06);
     --border-medium: rgba(0, 0, 0, 0.08);
     --glass-bg: rgba(255, 255, 255, 0.7);
@@ -70,6 +82,9 @@
     --bg-primary: #0a0a12;
     --bg-card: rgba(255, 255, 255, 0.08);
     --bg-card-solid: #1C1C1E;
+    --glass-card: rgba(34, 34, 40, 0.66);
+    --glass-edge: rgba(255, 255, 255, 0.08);
+    --shell-bg: #07070D;
     --text-primary: #ffffff;
     --text-secondary: rgba(255, 255, 255, 0.65);
     --border-subtle: rgba(255, 255, 255, 0.10);
@@ -202,10 +217,33 @@
      and the whole layout lost its structure in dark mode. The border carries
      the edge, the shadow carries the lift, and each theme sets its own. */
   .health-card {
-    background: var(--bg-card-solid);
-    border-radius: 20px;
+    background: var(--glass-card);
+    -webkit-backdrop-filter: saturate(160%) blur(20px);
+    backdrop-filter: saturate(160%) blur(20px);
+    border-radius: 24px;
     border: 1px solid var(--border-subtle);
-    box-shadow: var(--card-shadow);
+    /* The hairline along the top edge is what makes a translucent panel read
+       as glass rather than as a washed-out rectangle. */
+    box-shadow: inset 0 1px 0 var(--glass-edge), var(--card-shadow);
+  }
+  /* Without blur support the card would be semi-transparent over live content
+     and unreadable, so it falls back to the solid surface. */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .health-card { background: var(--bg-card-solid); }
+  }
+
+  /* The two shell panels: the rail and the content column. Rounded and inset
+     from the window edge, so the window's own ground shows as a margin around
+     them — which is also what gives the glass something to pick up. */
+  .shell-panel {
+    background: var(--glass-card);
+    -webkit-backdrop-filter: saturate(170%) blur(28px);
+    backdrop-filter: saturate(170%) blur(28px);
+    border: 1px solid var(--border-subtle);
+    box-shadow: inset 0 1px 0 var(--glass-edge), var(--card-shadow);
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .shell-panel { background: var(--bg-card-solid); }
   }
 
   /* Only for cards that are actually a control — a link, a button, a row you
@@ -557,7 +595,7 @@
   left: 12px;
   right: 12px;
   top: 0;
-  border-radius: 12px;
+  border-radius: 999px;
   background: var(--accent-soft);
   transition: transform 0.42s cubic-bezier(0.32, 0.72, 0, 1),
               height    0.42s cubic-bezier(0.32, 0.72, 0, 1),
@@ -601,10 +639,10 @@
 }
 .cc-module {
   background: var(--cc-module);
-  border-radius: 14px;
+  border-radius: 18px;
 }
 .cc-tile {
-  border-radius: 12px;
+  border-radius: 999px;
   transition: background-color 0.15s ease;
 }
 .cc-tile:hover { background: var(--cc-tile-hover); }

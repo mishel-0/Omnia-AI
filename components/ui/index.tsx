@@ -41,7 +41,7 @@ export function Card({
   children,
   ...rest
 }: React.HTMLAttributes<HTMLDivElement> & { size?: 'sm' | 'md' | 'lg' }) {
-  const radius = size === 'lg' ? 'rounded-[28px]' : size === 'sm' ? 'rounded-[16px]' : 'rounded-[20px]';
+  const radius = size === 'lg' ? 'rounded-[30px]' : size === 'sm' ? 'rounded-[20px]' : 'rounded-[24px]';
   return (
     <div
       className={cn('health-card', radius, className)}
@@ -162,10 +162,12 @@ export function Button({
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
 }) {
+  // Pills. A button is a thing you press, and a fully rounded edge says so
+  // without a label having to.
   const sizes = {
-    sm: 'text-[13px] px-3.5 py-2 rounded-[10px]',
-    md: 'text-[14px] px-5 py-3 rounded-[12px]',
-    lg: 'text-[16px] px-6 py-3.5 rounded-[14px]',
+    sm: 'text-[13px] px-4 py-2 rounded-full',
+    md: 'text-[14px] px-5 py-3 rounded-full',
+    lg: 'text-[16px] px-6 py-3.5 rounded-full',
   };
   const variants = {
     // Text colour comes from a token, not a literal `text-white`. The accent is

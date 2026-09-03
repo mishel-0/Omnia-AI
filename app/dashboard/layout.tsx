@@ -61,9 +61,12 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   // navigation — only the page below them swaps.
   return (
     <OnboardingProvider>
-      <div className="flex min-h-screen bg-[var(--bg-primary)]">
+      {/* The window's own ground shows through as a margin around both panels.
+          That margin is what the frosted surfaces pick up — glass over an
+          opaque fill of the same colour is just a lighter opaque fill. */}
+      <div className="flex min-h-screen gap-2.5 p-2.5 bg-[var(--shell-bg)]">
         <Sidebar />
-        <div className="flex-1 min-w-0 flex flex-col">
+        <div className="shell-panel flex-1 min-w-0 flex flex-col rounded-[26px]">
           <TopBar />
       {/* Keyed on the path so React treats each section as a new element and
           restarts the animation. The wrapper is what animates, not the page's
