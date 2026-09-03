@@ -1,6 +1,6 @@
 {
   "name": "omnia-ai",
-  "version": "1.14.0",
+  "version": "1.16.0",
   "private": true,
   "main": "desktop/main.js",
   "scripts": {
@@ -67,8 +67,8 @@
       "icon": "desktop/icon.ico",
       "extraResources": [
         {
-          "from": "dist/omnia-backend.exe",
-          "to": "backend.exe"
+          "from": "dist/omnia-backend",
+          "to": "backend"
         }
       ],
       "signtoolOptions": {

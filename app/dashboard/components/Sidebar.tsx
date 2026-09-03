@@ -23,8 +23,8 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  LayoutDashboard, Users as UsersIcon, ScrollText, GraduationCap, Settings as SettingsIcon,
-  ChevronRight, LifeBuoy, Sun, Moon, ChevronsUpDown, FlaskConical,
+  LayoutDashboard, Users as UsersIcon, ScrollText, Settings as SettingsIcon,
+  ChevronRight, LifeBuoy, Sun, Moon, ChevronsUpDown, FlaskConical, Box,
 } from 'lucide-react';
 import { BrandMark } from '@/components/ui';
 import { useAuth, canWrite } from '@/lib/auth';
@@ -56,7 +56,7 @@ const CLINICAL: Item[] = [
 
 const SYSTEM: Item[] = [
   { label: 'Users', href: '/dashboard/users', icon: UsersIcon, show: (r) => r === 'admin' },
-  { label: 'Models', href: '/dashboard/training', icon: GraduationCap, show: (_r, w) => !!w },
+  { label: 'Models', href: '/dashboard/models', icon: Box, show: (_r, w) => !!w },
   { label: 'Settings', href: '/dashboard/settings', icon: SettingsIcon, show: () => true },
 ];
 // System Health deliberately stays out of the rail: /admin is its own route

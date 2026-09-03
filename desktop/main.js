@@ -79,12 +79,17 @@ function isPortInUse(port) {
 // ── Path resolution ─────────────────────────────────────────────────────
 function getBackendPath() {
   if (app.isPackaged) {
-    // PyInstaller emits `omnia-backend` on macOS and `omnia-backend.exe` on
-    // Windows, and electron-builder copies each under a matching name. Asking
-    // for the extensionless name on Windows found nothing, so the app reported
-    // "Backend component not found" on every launch.
-    const name = process.platform === 'win32' ? 'backend.exe' : 'backend';
-    return path.join(process.resourcesPath, name);
+    // The backend is a PyInstaller onedir bundle: a directory named `backend`
+    // holding the executable and an `_internal` folder of libraries. It used
+    // to be a single file copied to Resources/backend, which is why this once
+    // pointed straight at that path.
+    //
+    // The executable keeps PyInstaller's own name inside the directory, and
+    // only Windows carries an extension — asking for the extensionless name
+    // there found nothing and reported "Backend component not found" on every
+    // launch, which is the bug this comment previously described.
+    const exe = process.platform === 'win32' ? 'omnia-backend.exe' : 'omnia-backend';
+    return path.join(process.resourcesPath, 'backend', exe);
   }
   return path.join(__dirname, '..', 'backend', 'main.py');
 }

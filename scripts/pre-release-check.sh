@@ -65,9 +65,9 @@ echo ""
 
 # ── 5. Backend binary exists ──
 echo "[5/6] Backend binary..."
-if [ -f "dist/omnia-backend" ]; then
-  SIZE=$(ls -lh dist/omnia-backend | awk '{print $5}')
-  echo "  ✅ Backend binary: ${SIZE}"
+if [ -x "dist/omnia-backend/omnia-backend" ]; then
+  SIZE=$(du -sh dist/omnia-backend | cut -f1)
+  echo "  ✅ Backend bundle: ${SIZE} (onedir)"
 else
   echo "  ⚠️  No backend binary — PyInstaller not run yet (will be built during packaging)"
 fi

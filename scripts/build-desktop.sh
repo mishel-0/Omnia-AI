@@ -122,11 +122,16 @@ run_step pyinstaller pyinstaller \
 
 deactivate
 
-if [ ! -f "dist/omnia-backend" ] && [ ! -f "dist/omnia-backend.exe" ]; then
-    echo "  ❌ Backend build failed!"
+# onedir: dist/omnia-backend is a directory holding the executable and its
+# libraries, so check for the executable inside it rather than for a file at
+# that path — the old test passed for a onefile build and silently failed for
+# this one.
+if [ ! -x "dist/omnia-backend/omnia-backend" ] && [ ! -f "dist/omnia-backend/omnia-backend.exe" ]; then
+    echo "  ❌ Backend build failed — no executable in dist/omnia-backend/"
+    ls -la dist/omnia-backend 2>/dev/null | head || true
     exit 1
 fi
-echo "  ✅ Backend built → dist/omnia-backend"
+echo "  ✅ Backend built → dist/omnia-backend/ ($(du -sh dist/omnia-backend | cut -f1))"
 
 # ── 3. Clean old builds ──
 echo ""
@@ -170,7 +175,8 @@ if [ "$PLATFORM" = "mac" ] || [ "$PLATFORM" = "all" ]; then
     # The Next.js frontend ships to Contents/Resources/frontend, NOT app.asar.
     # Checking the asar gives a false negative — verify the real location.
     require_nonempty_dir "$APP_PATH/Contents/Resources/frontend"
-    require_file "$APP_PATH/Contents/Resources/backend"
+    require_nonempty_dir "$APP_PATH/Contents/Resources/backend"
+    require_file "$APP_PATH/Contents/Resources/backend/omnia-backend"
     echo "  ✅ macOS app verified (frontend + bundled backend present)"
 fi
 
