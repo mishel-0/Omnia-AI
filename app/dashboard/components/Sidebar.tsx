@@ -121,7 +121,7 @@ export default function Sidebar() {
     if (shown.length === 0) return null;
     return (
       <div className="mt-6">
-        <p className="px-3 mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.7px] text-[var(--text-secondary)]">
+        <p className="px-3.5 mb-2 text-[10.5px] font-semibold uppercase tracking-[0.7px] text-[var(--text-secondary)]">
           {title}
         </p>
         {shown.map((i) => (
@@ -138,7 +138,7 @@ export default function Sidebar() {
           window buttons macOS draws over the top-left have the space above it
           to themselves. pl-6 puts the mark on the same left edge as the
           navigation icons below. */}
-      <div className="titlebar-zone shrink-0 flex items-end gap-2.5 pl-6 pr-4 pb-3 border-b border-[var(--border-subtle)]">
+      <div className="titlebar-zone shrink-0 flex items-end gap-2.5 pl-[26px] pr-4 pb-3 border-b border-[var(--border-subtle)]">
         <BrandMark size={32} />
         <div className="min-w-0 pb-0.5">
           {/* Measured, not guessed: at 13.5px with a 34px mark the product name
@@ -171,7 +171,7 @@ export default function Sidebar() {
       <div className="titlebar-no-drag px-3 pb-3 space-y-2">
         <button
           onClick={() => router.push('/dashboard/help')}
-          className="w-full flex items-center gap-2.5 rounded-full border border-[var(--border-subtle)] px-3.5 py-2.5 text-left transition-colors hover:bg-[var(--cc-tile-hover)]"
+          className="w-full flex items-center gap-2.5 rounded-full border border-[var(--border-subtle)] pl-[13px] pr-3.5 py-2.5 text-left transition-colors hover:bg-[var(--cc-tile-hover)]"
         >
           <span className="w-7 h-7 rounded-full bg-[var(--accent-soft)] text-[var(--accent)] grid place-items-center shrink-0">
             <LifeBuoy className="w-3.5 h-3.5" />
@@ -224,7 +224,7 @@ function ThemeSelect() {
   const { theme, setTheme } = useTheme();
   const Icon = theme === 'dark' ? Moon : Sun;
   return (
-    <label className="relative flex items-center gap-2.5 rounded-full border border-[var(--border-subtle)] px-3.5 py-2.5 cursor-pointer transition-colors hover:bg-[var(--cc-tile-hover)]">
+    <label className="relative flex items-center gap-2.5 rounded-full border border-[var(--border-subtle)] pl-[13px] pr-3.5 py-2.5 cursor-pointer transition-colors hover:bg-[var(--cc-tile-hover)]">
       <Icon className="w-4 h-4 text-[var(--text-secondary)] shrink-0" />
       <span className="text-[12.5px] font-medium capitalize">{theme}</span>
       <ChevronsUpDown className="w-3.5 h-3.5 text-[var(--text-secondary)] ml-auto shrink-0" />
