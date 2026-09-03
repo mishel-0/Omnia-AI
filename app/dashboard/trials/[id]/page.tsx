@@ -757,7 +757,7 @@ export default function TrialDetail() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
+      <div className="">
         <div className="border-b border-[var(--border-subtle)] px-6 py-3 bg-[var(--bg-card-solid)]">
           <div className="w-24 h-2.5 rounded-[4px] skeleton-shimmer mb-2.5" />
           <div className="w-48 h-3.5 rounded-[4px] skeleton-shimmer mb-1.5" />
@@ -781,7 +781,7 @@ export default function TrialDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
+    <div className="">
       {/* Header */}
       <div className="max-w-[1200px] px-7 pt-6">
       {/* Breadcrumb rather than a back button in a strip of its own. The strip

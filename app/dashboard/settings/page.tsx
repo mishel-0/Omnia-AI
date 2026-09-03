@@ -113,7 +113,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
+    <div className="">
 
       <div className="max-w-3xl mx-auto px-6 py-7">
         <h2 className="text-[26px] font-semibold tracking-[-0.5px] leading-tight">Settings</h2>

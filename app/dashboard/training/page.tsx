@@ -228,7 +228,7 @@ export default function TrainingPage() {
 
   if (loading || !data) {
     return (
-      <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
+      <div className="">
         <div className="max-w-[1200px] px-7 pt-6 pb-10">
           <div className="w-44 h-3.5 rounded-[4px] skeleton-shimmer mb-1.5" />
           <div className="w-64 h-2.5 rounded-[4px] skeleton-shimmer mb-5" />
@@ -243,7 +243,7 @@ export default function TrainingPage() {
   const pct = Math.round((run?.progress ?? 0) * 100);
 
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
+    <div className="">
       <div className="max-w-[1200px] px-7 pt-6">
       {/* Breadcrumb rather than a back button in a strip of its own. The strip
           was left over from before there was a shell to come back to: it

@@ -190,7 +190,7 @@ export default function TrialDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
+      <div className="">
         <div className="border-b border-[var(--border-subtle)] px-6 py-3.5 flex items-center gap-3 bg-[var(--bg-card-solid)]">
           <div className="w-8 h-8 rounded-[8px] skeleton-shimmer" />
           <div className="space-y-1.5">
@@ -225,7 +225,7 @@ export default function TrialDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
+    <div className="">
 
       <SystemHealth />
 

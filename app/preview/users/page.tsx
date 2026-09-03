@@ -15,8 +15,7 @@ import { notFound } from 'next/navigation';
 import { AuthProvider } from '@/lib/auth';
 import { OnboardingProvider } from '@/lib/onboarding';
 import { DialogProvider } from '@/lib/dialogs';
-import Sidebar from '../../dashboard/components/Sidebar';
-import TopBar from '../../dashboard/components/TopBar';
+import Shell from '../../dashboard/components/Shell';
 import UsersPage from '../../dashboard/users/page';
 
 const ago = (m: number) => new Date(Date.now() - m * 60000).toISOString();
@@ -54,13 +53,9 @@ export default function UsersPreview() {
     <AuthProvider>
       <OnboardingProvider>
         <DialogProvider>
-          <div className="flex min-h-screen bg-[var(--bg-primary)]">
-            <Sidebar />
-            <div className="flex-1 min-w-0 flex flex-col">
-              <TopBar />
+          <Shell>
               <UsersPage />
-            </div>
-          </div>
+        </Shell>
         </DialogProvider>
       </OnboardingProvider>
     </AuthProvider>

@@ -20,8 +20,7 @@ import React from 'react';
 import { notFound } from 'next/navigation';
 import { AuthProvider } from '@/lib/auth';
 import { OnboardingProvider } from '@/lib/onboarding';
-import Sidebar from '../../dashboard/components/Sidebar';
-import TopBar from '../../dashboard/components/TopBar';
+import Shell from '../../dashboard/components/Shell';
 import PatientRegistry from '../../dashboard/patients/page';
 
 const SAMPLE = [
@@ -58,13 +57,9 @@ export default function PatientsPreview() {
   return (
     <AuthProvider>
       <OnboardingProvider>
-        <div className="flex min-h-screen bg-[var(--bg-primary)]">
-          <Sidebar />
-          <div className="flex-1 min-w-0 flex flex-col">
-            <TopBar />
+        <Shell>
             <PatientRegistry />
-          </div>
-        </div>
+        </Shell>
       </OnboardingProvider>
     </AuthProvider>
   );

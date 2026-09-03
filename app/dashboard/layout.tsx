@@ -3,8 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { BackendConnection } from '@/app/dashboard/components/BackendConnection';
-import Sidebar from './components/Sidebar';
-import TopBar from './components/TopBar';
+import Shell from './components/Shell';
 import AppErrorBoundary from '@/app/dashboard/components/AppErrorBoundary';
 import { useAuth } from '@/lib/auth';
 import { OnboardingProvider } from '@/lib/onboarding';
@@ -64,19 +63,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       {/* The window's own ground shows through as a margin around both panels.
           That margin is what the frosted surfaces pick up — glass over an
           opaque fill of the same colour is just a lighter opaque fill. */}
-      <div className="flex min-h-screen gap-2.5 p-2.5 bg-[var(--shell-bg)]">
-        <Sidebar />
-        <div className="shell-panel flex-1 min-w-0 flex flex-col rounded-[26px]">
-          <TopBar />
-      {/* Keyed on the path so React treats each section as a new element and
-          restarts the animation. The wrapper is what animates, not the page's
-          contents — one compositor-only fade on a single node, rather than a
-          transition on the hundreds of cards inside it. */}
-          <div key={pathname} className="page-in flex-1 min-w-0">
-            {children}
-          </div>
+      <Shell>
+        {/* Keyed on the path so React treats each section as a new element and
+            restarts the animation. */}
+        <div key={pathname} className="page-in flex-1 min-w-0">
+          {children}
         </div>
-      </div>
+      </Shell>
     </OnboardingProvider>
   );
 }

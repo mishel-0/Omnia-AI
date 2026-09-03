@@ -21,7 +21,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Network, ShieldCheck, Building2 } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import { Card } from '@/components/ui';
 
 const PHASES = [
@@ -149,6 +149,15 @@ export default function FederatedGraphic() {
         <g>
           <circle cx={HUB.cx} cy={HUB.cy} r="27" fill="var(--bg-card-solid)"
                   stroke="#34C759" strokeWidth="2" />
+          {/* A hub glyph, drawn in the same coordinate space as the nodes:
+              one node above, two below, joined. */}
+          <g stroke="#34C759" strokeWidth="1.6" fill="#34C759">
+            <circle cx={HUB.cx} cy={HUB.cy - 8} r="2.6" />
+            <circle cx={HUB.cx - 7} cy={HUB.cy + 7} r="2.6" />
+            <circle cx={HUB.cx + 7} cy={HUB.cy + 7} r="2.6" />
+            <path d={`M ${HUB.cx} ${HUB.cy - 8} L ${HUB.cx - 7} ${HUB.cy + 7} M ${HUB.cx} ${HUB.cy - 8} L ${HUB.cx + 7} ${HUB.cy + 7}`}
+                  fill="none" />
+          </g>
           {merging && (
             <circle cx={HUB.cx} cy={HUB.cy} r="27" fill="none" stroke="#34C759" strokeWidth="2">
               <animate attributeName="r" values="27;36;27" dur="1.6s" repeatCount="indefinite" />
@@ -157,21 +166,6 @@ export default function FederatedGraphic() {
           )}
         </g>
       </svg>
-
-      {/* The hub and site glyphs sit over the SVG so they can use the icon set
-          rather than hand-drawn paths. */}
-      <div className="relative -mt-[210px] h-[210px] pointer-events-none">
-        <span className="absolute grid place-items-center"
-              style={{ left: `${HUB.cx / 344 * 100}%`, top: `${HUB.cy / 190 * 100}%`, transform: 'translate(-50%,-50%)' }}>
-          <Network className="w-[18px] h-[18px] text-[#34C759] -mt-3.5" />
-        </span>
-        {SITES.filter(s => s.label !== 'You').map(s => (
-          <span key={s.label} className="absolute grid place-items-center"
-                style={{ left: `${s.cx / 344 * 100}%`, top: `${s.cy / 190 * 100}%`, transform: 'translate(-50%,-50%)' }}>
-            <Building2 className="w-3.5 h-3.5 text-[var(--text-secondary)] -mt-3" />
-          </span>
-        ))}
-      </div>
 
       <div className="mt-2">
         <div className="flex items-center gap-1.5 mb-2">

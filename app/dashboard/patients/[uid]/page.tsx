@@ -301,7 +301,7 @@ export default function PatientContainerPage() {
   }, [latest, baseline]);
 
   return (
-    <div className="min-h-screen">
+    <div className="">
       <div className="max-w-[1200px] px-7 pt-6 pb-10">
       {/* Breadcrumb rather than a back button in a strip of its own. The strip
           was left over from before there was a shell to come back to: it

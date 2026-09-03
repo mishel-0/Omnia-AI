@@ -131,7 +131,7 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="titlebar-drag shell-panel w-[264px] shrink-0 h-[calc(100vh-20px)] sticky top-2.5 flex flex-col rounded-[26px] overflow-hidden">
+    <aside className="titlebar-drag shell-panel w-[264px] shrink-0 h-full flex flex-col rounded-[26px] overflow-hidden">
       {/* items-end parks the brand at the foot of the titlebar zone, so the
           window buttons macOS draws over the top-left have the space above it
           to themselves. pl-6 puts the mark on the same left edge as the

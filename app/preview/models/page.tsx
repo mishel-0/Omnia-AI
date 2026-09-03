@@ -14,8 +14,7 @@ import React from 'react';
 import { notFound } from 'next/navigation';
 import { AuthProvider } from '@/lib/auth';
 import { OnboardingProvider } from '@/lib/onboarding';
-import Sidebar from '../../dashboard/components/Sidebar';
-import TopBar from '../../dashboard/components/TopBar';
+import Shell from '../../dashboard/components/Shell';
 import ModelsPage from '../../dashboard/models/page';
 
 const ago = (d: number) => new Date(Date.now() - d * 86400000).toISOString();
@@ -57,13 +56,9 @@ export default function ModelsPreview() {
   return (
     <AuthProvider>
       <OnboardingProvider>
-        <div className="flex min-h-screen gap-2.5 p-2.5 bg-[var(--shell-bg)]">
-          <Sidebar />
-          <div className="shell-panel flex-1 min-w-0 flex flex-col rounded-[26px]">
-            <TopBar />
+        <Shell>
             <ModelsPage />
-          </div>
-        </div>
+        </Shell>
       </OnboardingProvider>
     </AuthProvider>
   );
