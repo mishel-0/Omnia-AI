@@ -133,6 +133,28 @@ if [ ! -x "dist/omnia-backend/omnia-backend" ] && [ ! -f "dist/omnia-backend/omn
 fi
 echo "  ✅ Backend built → dist/omnia-backend/ ($(du -sh dist/omnia-backend | cut -f1))"
 
+# PyInstaller does not cross-compile — it freezes for the machine it runs on.
+# Building the Windows package here would therefore wrap a macOS Mach-O binary
+# in a Windows installer, which installs cleanly and then cannot start its
+# backend. The old script did exactly that and exited 0, because the output
+# verification below only ever covered macOS.
+if [ "$PLATFORM" = "win" ] || [ "$PLATFORM" = "all" ]; then
+    if [ ! -f "dist/omnia-backend/omnia-backend.exe" ]; then
+        echo ""
+        echo "  ❌ Cannot build the Windows package on $(uname -s)."
+        echo ""
+        echo "     PyInstaller freezes for the host platform, so the backend just"
+        echo "     built is a $(uname -m) $(uname -s) executable. Packaging it for"
+        echo "     Windows produces an installer whose backend cannot run."
+        echo ""
+        echo "     Build it on Windows, or let CI do it: the build-windows job in"
+        echo "     .github/workflows/release.yml runs on a windows-latest runner,"
+        echo "     smoke-tests the bundled backend and grades a real slide before"
+        echo "     the installer is published."
+        exit 1
+    fi
+fi
+
 # ── 3. Clean old builds ──
 echo ""
 echo "[3/4] Cleaning old builds..."
@@ -178,6 +200,17 @@ if [ "$PLATFORM" = "mac" ] || [ "$PLATFORM" = "all" ]; then
     require_nonempty_dir "$APP_PATH/Contents/Resources/backend"
     require_file "$APP_PATH/Contents/Resources/backend/omnia-backend"
     echo "  ✅ macOS app verified (frontend + bundled backend present)"
+fi
+
+if [ "$PLATFORM" = "win" ] || [ "$PLATFORM" = "all" ]; then
+    # The Windows half of the same check. Its absence is why a broken Windows
+    # package could be produced with a zero exit code.
+    WIN_DIR="dist-desktop/win-unpacked"
+    require_nonempty_dir "$WIN_DIR"
+    require_nonempty_dir "$WIN_DIR/resources/frontend"
+    require_nonempty_dir "$WIN_DIR/resources/backend"
+    require_file "$WIN_DIR/resources/backend/omnia-backend.exe"
+    echo "  ✅ Windows app verified (frontend + bundled backend present)"
 fi
 
 echo ""

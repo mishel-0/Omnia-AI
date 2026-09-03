@@ -153,8 +153,11 @@ jobs:
       - name: Smoke test the bundled backend
         shell: pwsh
         run: |
-          $exe = Get-ChildItem -Path dist -Filter "omnia-backend*.exe" | Select-Object -First 1
-          if (-not $exe) { throw "No backend executable found in dist/" }
+          # onedir: the executable lives inside dist/omnia-backend/ alongside
+          # its libraries, not at dist/omnia-backend.exe. A non-recursive
+          # Get-ChildItem on dist/ silently found nothing after that change.
+          $exe = Get-ChildItem -Path dist/omnia-backend -Filter "omnia-backend.exe" | Select-Object -First 1
+          if (-not $exe) { throw "No backend executable found in dist/omnia-backend/" }
           Write-Host "Starting $($exe.Name) ($([math]::Round($exe.Length / 1MB, 0)) MB)..."
 
           $env:OMNIA_DATA_DIR = "$env:RUNNER_TEMP\omnia-smoke"
@@ -162,7 +165,8 @@ jobs:
           $proc = Start-Process -FilePath $exe.FullName -PassThru -NoNewWindow
 
           try {
-            # First start unpacks the onefile bundle, which is slow on CI.
+            # The bundle ships unpacked now, so this is import time rather
+            # than decompression — but a cold CI runner is still slow.
             $ready = $false
             foreach ($i in 1..180) {
               Start-Sleep -Seconds 1
