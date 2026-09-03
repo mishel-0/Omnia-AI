@@ -12,6 +12,10 @@ datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 # relative to the frozen app (see grading_model.MODEL_PATH).
 datas += [('backend/models/omnia_prostate_v1.pt', 'backend/models')]
 
+# The release notes ship with the build so the notes a site reads are the notes
+# for the version they are running, rather than whatever a website serves today.
+datas += [('CHANGELOG.md', '.')]
+
 # torch/torchvision have a lot of non-Python payload (native libs, ATen
 # kernels) that plain hiddenimports won't catch — collect_all pulls in
 # everything PyInstaller's static analysis would otherwise miss.

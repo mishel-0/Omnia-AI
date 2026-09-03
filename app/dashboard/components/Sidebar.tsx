@@ -28,7 +28,6 @@ import {
 } from 'lucide-react';
 import { BrandMark } from '@/components/ui';
 import { useAuth, canWrite } from '@/lib/auth';
-import { useOnboarding } from '@/lib/onboarding';
 import { useTheme } from '@/lib/theme';
 import { cn } from '@/lib/utils';
 
@@ -54,6 +53,10 @@ const CLINICAL: Item[] = [
   { label: 'Trials', href: '/dashboard/trials', icon: FlaskConical, show: () => true },
 ];
 
+const SUPPORT: Item[] = [
+  { label: 'Help', href: '/dashboard/help', icon: LifeBuoy, show: () => true },
+];
+
 const SYSTEM: Item[] = [
   { label: 'Users', href: '/dashboard/users', icon: UsersIcon, show: (r) => r === 'admin' },
   { label: 'Models', href: '/dashboard/models', icon: Box, show: (_r, w) => !!w },
@@ -68,10 +71,9 @@ export default function Sidebar() {
   const pathname = usePathname() || '';
   const { user } = useAuth();
   const writable = canWrite(user?.role);
-  const { open: openGuide } = useOnboarding();
 
   const visible = (items: Item[]) => items.filter((i) => i.show(user?.role, writable));
-  const all = [...PRIMARY, ...CLINICAL, ...SYSTEM];
+  const all = [...PRIMARY, ...CLINICAL, ...SYSTEM, ...SUPPORT];
 
   // Longest matching href wins — every route starts with /dashboard, so a
   // plain prefix test would light up Dashboard on every page.
@@ -163,11 +165,12 @@ export default function Sidebar() {
         ))}
         <Group title="Clinical" items={CLINICAL} />
         <Group title="System" items={SYSTEM} />
+        <Group title="Support" items={SUPPORT} />
       </div>
 
       <div className="titlebar-no-drag px-3 pb-3 space-y-2">
         <button
-          onClick={openGuide}
+          onClick={() => router.push('/dashboard/help')}
           className="w-full flex items-center gap-2.5 rounded-full border border-[var(--border-subtle)] px-3.5 py-2.5 text-left transition-colors hover:bg-[var(--cc-tile-hover)]"
         >
           <span className="w-7 h-7 rounded-full bg-[var(--accent-soft)] text-[var(--accent)] grid place-items-center shrink-0">
@@ -175,7 +178,7 @@ export default function Sidebar() {
           </span>
           <span className="leading-tight min-w-0">
             <span className="block text-[12px] font-semibold">Need help?</span>
-            <span className="block text-[10.5px] text-[var(--text-secondary)]">Guide and support</span>
+            <span className="block text-[10.5px] text-[var(--text-secondary)]">Guide, status, diagnostics</span>
           </span>
           <ChevronRight className="w-3.5 h-3.5 text-[var(--text-secondary)] ml-auto shrink-0" />
         </button>

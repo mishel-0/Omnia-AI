@@ -10,3 +10,4 @@ from backend.routes.queries import router as queries_router
 from backend.routes.training import router as training_router
 from backend.routes.batch import router as batch_router
 from backend.routes.gdpr import router as gdpr_router
+from backend.routes.support import router as support_router

@@ -1141,6 +1141,37 @@ check("US4 the user list never exposes a password hash",
       "a password hash was returned to the client")
 
 
+print("\n=== SP. SUPPORT SURFACES ===")
+
+s, _cl = req("GET", "/api/system/changelog", token=ADMIN)
+check("SP1 the release notes shipped with the build are readable",
+      s == 200 and len(_cl.get("markdown", "")) > 100,
+      "no bundled release notes — the app would have to fetch them, which it cannot do offline")
+
+s, _raw = req_raw("GET", "/api/system/diagnostics", token=ADMIN)
+check("SP2 an administrator can generate a diagnostics bundle",
+      s == 200 and _raw[:2] == b"PK", f"diagnostics returned {s}")
+
+# The point of the bundle is that it can be emailed. That only holds if it
+# carries no patient data.
+import io as _io, zipfile as _zip
+try:
+    _z = _zip.ZipFile(_io.BytesIO(_raw))
+    _body = _z.read("diagnostics.json").decode()
+except Exception:
+    _body = ""
+check("SP3 the diagnostics bundle carries no patient data",
+      _body and not any(k in _body for k in ('"initials"', '"year_of_birth"', '"notes"', 'OMN-')),
+      "a support file that carries clinical records turns a support request into a disclosure")
+
+s, _ = req_raw("GET", "/api/system/diagnostics", token=PATH_TOKEN)
+check("SP4 a non-administrator cannot generate diagnostics", s == 403,
+      f"a pathologist got {s} — the bundle carries filesystem paths and a map of the machine")
+
+s, _ = req_raw("GET", "/api/system/diagnostics")
+check("SP5 diagnostics requires authentication", s in (401, 403), f"anonymous got {s}")
+
+
 print("\n" + "=" * 60)
 print(f"PASSED: {len(PASSES)}   FAILED: {len(FAILS)}")
 print("=" * 60)

@@ -229,7 +229,7 @@ async def _record_request_origin(request, call_next):
 from backend.routes import (
     license_router, trials_router, reports_router, analysis_router,
     users_router, audit_router, queries_router, training_router,
-    patients_router, batch_router, gdpr_router,
+    patients_router, batch_router, gdpr_router, support_router,
 )
 
 app.include_router(license_router)
@@ -243,6 +243,7 @@ app.include_router(queries_router)
 app.include_router(training_router)
 app.include_router(batch_router)
 app.include_router(gdpr_router)
+app.include_router(support_router)
 
 # A run recorded as "running" cannot have survived a restart — settle those now.
 try:
