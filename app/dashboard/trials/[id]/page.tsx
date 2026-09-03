@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
-  ArrowLeft, Plus, Upload, Check, Download, FileText, Lock,
-  MessageSquareWarning, ChevronDown, ChevronUp, X, Sparkles, FlaskConical, Trash2,
+  Plus, Upload, Check, Download, FileText, Lock,
+  MessageSquareWarning, ChevronDown, ChevronUp, X, Sparkles, FlaskConical, Trash2, ChevronRight,
 } from 'lucide-react';
 import { Card, Button, Pill, EmptyState, TableSkeleton } from '@/components/ui';
 import { apiFetch, apiSend, useAuth, canWrite } from '@/lib/auth';
@@ -783,10 +783,25 @@ export default function TrialDetail() {
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
       {/* Header */}
-      <div className="titlebar-inset border-b border-[var(--border-subtle)] pr-6 py-3 bg-[var(--bg-card-solid)]">
-        <button onClick={() => router.push('/dashboard')} className="flex items-center gap-1 text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] mb-1.5 transition-colors">
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to Trials
+      <div className="max-w-[1200px] px-7 pt-6">
+      {/* Breadcrumb rather than a back button in a strip of its own. The strip
+          was left over from before there was a shell to come back to: it
+          carried an 84px inset meant to clear window buttons that are now two
+          hundred pixels away, and a second horizontal rule under a header that
+          already draws one. */}
+      <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[12.5px] mb-4">
+        <button onClick={() => router.push('/dashboard')}
+                className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
+          Dashboard
         </button>
+        <ChevronRight className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+        <button onClick={() => router.push('/dashboard/trials')}
+                className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
+          Trials
+        </button>
+        <ChevronRight className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+        <span className="font-medium text-[var(--accent)] truncate max-w-[280px]" aria-current="page">{trial.name}</span>
+      </nav>
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-[16px] font-semibold">{trial.name}</h1>

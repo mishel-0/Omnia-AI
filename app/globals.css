@@ -166,11 +166,33 @@
     -webkit-app-region: no-drag;
   }
   /* The window uses titleBarStyle: 'hiddenInset', so macOS draws its close/
-     minimise/zoom buttons over the top-left of the page. Any header that
-     starts at the left edge ends up underneath them — the app title was
-     sitting behind the green button. Reserve that space. */
+     minimise/zoom buttons over the top-left of the page.
+     
+     This used to reserve the space horizontally, with 84px of left padding.
+     That was right while the header was a bar running along the top: push the
+     title to the right of the buttons and it clears them. It is wrong now that
+     the top-left belongs to a sidebar, because the brand ends up 60px further
+     right than every navigation row beneath it, and the eye reads the
+     misalignment immediately even when it cannot name it.
+     
+     The space is reserved vertically instead. The brand sits below the buttons
+     and shares its left edge with the navigation. */
   .titlebar-inset {
     padding-left: 84px;
+  }
+
+  /* The height both the rail's brand block and the header are pinned to, so
+     their bottom borders meet as one continuous line across the window rather
+     than two rules 17px apart. */
+  :root {
+    /* 78, not 72. macOS draws its window buttons across roughly y 14–30, and
+       at 72 the brand mark began at y 27 — touching them. This leaves the mark
+       starting at 34, clear of the buttons, with the border still landing on
+       the same line as the header's. */
+    --titlebar-h: 78px;
+  }
+  .titlebar-zone {
+    height: var(--titlebar-h);
   }
 
   /* Apple Health Card Styles */

@@ -59,7 +59,7 @@ export default function TopBar({ actions }: { actions?: React.ReactNode }) {
   }, []);
 
   return (
-    <header className="titlebar-drag sticky top-0 z-40 glass-chrome border-b border-[var(--border-subtle)] px-6 py-3 flex items-center gap-4">
+    <header className="titlebar-drag titlebar-zone sticky top-0 z-40 glass-chrome border-b border-[var(--border-subtle)] px-6 flex items-center gap-4">
       <div className="titlebar-no-drag relative flex-1 max-w-[420px]">
         <Search className="w-3.5 h-3.5 text-[var(--text-secondary)] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
         <input

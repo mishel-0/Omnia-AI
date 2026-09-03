@@ -132,9 +132,13 @@ export default function Sidebar() {
 
   return (
     <aside className="titlebar-drag w-[264px] shrink-0 h-screen sticky top-0 flex flex-col bg-[var(--sidebar-bg)] border-r border-[var(--border-subtle)]">
-      <div className="titlebar-inset flex items-center gap-2 px-3.5 pb-4 border-b border-[var(--border-subtle)]">
+      {/* items-end parks the brand at the foot of the titlebar zone, so the
+          window buttons macOS draws over the top-left have the space above it
+          to themselves. pl-6 puts the mark on the same left edge as the
+          navigation icons below. */}
+      <div className="titlebar-zone shrink-0 flex items-end gap-2.5 pl-6 pr-4 pb-3 border-b border-[var(--border-subtle)]">
         <BrandMark size={32} />
-        <div className="min-w-0">
+        <div className="min-w-0 pb-0.5">
           {/* Measured, not guessed: at 13.5px with a 34px mark the product name
               needed 128px in a 119px column and lost its last two letters. */}
           <h1 className="text-[13px] font-semibold leading-tight truncate">Omnia Pathology AI</h1>

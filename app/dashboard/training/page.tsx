@@ -3,8 +3,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  ArrowLeft, Cpu, MemoryStick, HardDrive, Zap, Database, GraduationCap,
-  Play, Square, CheckCircle2, AlertTriangle, FlaskConical, Info, History, ShieldCheck,
+  Cpu, MemoryStick, HardDrive, Zap, Database, GraduationCap,
+  Play, Square, CheckCircle2, AlertTriangle, FlaskConical, Info, History, ShieldCheck, ChevronRight,
 } from 'lucide-react';
 import { Card, Button, Pill, TableSkeleton } from '@/components/ui';
 import { apiFetch, apiSend, useAuth, canWrite } from '@/lib/auth';
@@ -229,11 +229,9 @@ export default function TrainingPage() {
   if (loading || !data) {
     return (
       <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
-        <div className="titlebar-inset border-b border-[var(--border-subtle)] pr-6 py-3.5 bg-[var(--bg-card-solid)]">
+        <div className="max-w-[1200px] px-7 pt-6 pb-10">
           <div className="w-44 h-3.5 rounded-[4px] skeleton-shimmer mb-1.5" />
-          <div className="w-64 h-2.5 rounded-[4px] skeleton-shimmer" />
-        </div>
-        <div className="max-w-5xl mx-auto px-6 py-6">
+          <div className="w-64 h-2.5 rounded-[4px] skeleton-shimmer mb-5" />
           <Card size="sm" className="overflow-hidden"><TableSkeleton rows={4} columns={4} /></Card>
         </div>
       </div>
@@ -246,10 +244,21 @@ export default function TrainingPage() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
-      <div className="titlebar-inset border-b border-[var(--border-subtle)] pr-6 py-3.5 flex items-center gap-3 bg-[var(--bg-card-solid)]">
-        <button onClick={() => router.push('/dashboard')} className="p-1.5 rounded-[8px] hover:bg-[var(--skeleton-bg)]">
-          <ArrowLeft className="w-4 h-4" />
+      <div className="max-w-[1200px] px-7 pt-6">
+      {/* Breadcrumb rather than a back button in a strip of its own. The strip
+          was left over from before there was a shell to come back to: it
+          carried an 84px inset meant to clear window buttons that are now two
+          hundred pixels away, and a second horizontal rule under a header that
+          already draws one. */}
+      <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[12.5px] mb-4">
+        <button onClick={() => router.push('/dashboard')}
+                className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
+          Dashboard
         </button>
+        <ChevronRight className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+        <span className="font-medium text-[var(--accent)]" aria-current="page">Models</span>
+      </nav>
+      <div className="flex items-center gap-3">
         <div>
           <h1 className="text-[15px] font-semibold">Model Training</h1>
           <p className="text-[11px] text-[var(--text-secondary)]">
@@ -258,7 +267,7 @@ export default function TrainingPage() {
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-6 space-y-5">
+      <div className="mt-6 pb-10 space-y-5">
         {/* Which model is grading right now. This is the first thing a
             pathologist needs from this screen — not the hardware, not the
             history — because it determines how to read every result the app
@@ -601,6 +610,7 @@ export default function TrainingPage() {
               </div>
           </Card>
         )}
+      </div>
       </div>
     </div>
   );

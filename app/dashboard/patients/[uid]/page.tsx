@@ -12,7 +12,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import {
-  ArrowLeft, FlaskConical, FileText, Layers, ChevronRight,
+  FlaskConical, FileText, Layers, ChevronRight,
   ShieldCheck, Download, Users, Activity, Microscope, Ruler, TrendingUp,
 } from 'lucide-react';
 import { Card, Button, EmptyState, TableSkeleton } from '@/components/ui';
@@ -302,17 +302,26 @@ export default function PatientContainerPage() {
 
   return (
     <div className="min-h-screen">
-      <div className="titlebar-drag titlebar-inset border-b border-[var(--border-subtle)] flex items-center gap-4 pr-6 py-3">
-        <button
-          onClick={() => router.push('/dashboard/patients')}
-          className="titlebar-no-drag inline-flex items-center gap-1.5 text-[12.5px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" /> Patients
+      <div className="max-w-[1200px] px-7 pt-6 pb-10">
+      {/* Breadcrumb rather than a back button in a strip of its own. The strip
+          was left over from before there was a shell to come back to: it
+          carried an 84px inset meant to clear window buttons that are now two
+          hundred pixels away, and a second horizontal rule under a header that
+          already draws one. */}
+      <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[12.5px] mb-4">
+        <button onClick={() => router.push('/dashboard')}
+                className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
+          Dashboard
         </button>
-        <h1 className="text-[13px] font-semibold tabular-nums">{uid}</h1>
-      </div>
+        <ChevronRight className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+        <button onClick={() => router.push('/dashboard/patients')}
+                className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
+          Patients
+        </button>
+        <ChevronRight className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+        <span className="font-medium text-[var(--accent)] tabular-nums" aria-current="page">{uid}</span>
+      </nav>
 
-      <div className="max-w-6xl mx-auto px-6 py-6">
         {loading ? (
           <TableSkeleton />
         ) : error || !data || !p ? (
