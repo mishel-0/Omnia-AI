@@ -37,7 +37,7 @@ import { Card, Button, EmptyState, TableSkeleton } from '@/components/ui';
 import { apiFetch, apiSend, useAuth, ROLE_LABELS, Role } from '@/lib/auth';
 import { useToast } from '@/lib/toast';
 import { useDialogs } from '@/lib/dialogs';
-import { cn, initials } from '@/lib/utils';
+import { cn, initials, relativeTime } from '@/lib/utils';
 
 interface ManagedUser {
   id: string;
@@ -57,21 +57,6 @@ const ROLE_TONE: Record<Role, string> = {
 };
 
 const PAGE_SIZE = 25;
-
-/** "Just now", "5h ago", "2 days ago" — and an honest blank for never. */
-function relative(iso?: string): string {
-  if (!iso) return 'Never signed in';
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return 'Never signed in';
-  const mins = Math.floor((Date.now() - then) / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
-  return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
 
 export default function UsersPage() {
   const router = useRouter();
@@ -448,7 +433,7 @@ function UserRow({ user: u, isYou, onSetActive }: {
       </td>
 
       <td className="px-4 py-3 text-[12.5px] text-[var(--text-secondary)] whitespace-nowrap">
-        {relative(u.last_login)}
+        {relativeTime(u.last_login, 'Never signed in')}
       </td>
 
       <td className="pr-5 pl-4 py-3 text-right relative" ref={cellRef}>

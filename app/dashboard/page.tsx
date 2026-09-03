@@ -315,18 +315,18 @@ export default function TrialDashboard() {
 
             {/* The one accent card — deliberately the only saturated surface on
                 the page, so the eye lands on the outstanding work first. */}
-            <div className="rounded-[20px] p-5 flex flex-col justify-between" style={{ background: 'linear-gradient(145deg, var(--accent-bright) 0%, var(--accent-hover) 100%)' }}>
+            <div className="rounded-[20px] p-5 flex flex-col justify-between" style={{ background: 'linear-gradient(145deg, var(--hero-from) 0%, var(--hero-to) 100%)' }}>
               <div>
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-[13px] font-semibold text-[var(--accent-contrast)]/95">Needs a pathologist</p>
-                  <span className="text-[10px] font-medium text-[var(--accent-contrast)]/80 bg-[var(--accent-contrast)]/15 rounded-full px-2 py-0.5">
+                  <p className="text-[13px] font-semibold text-[var(--hero-fg)]/95">Needs a pathologist</p>
+                  <span className="text-[10px] font-medium text-[var(--hero-fg)]/80 bg-[var(--hero-fg)]/15 rounded-full px-2 py-0.5">
                     {totals.active} active
                   </span>
                 </div>
-                <p className="text-[38px] font-semibold text-[var(--accent-contrast)] leading-none tabular-nums mt-3">
+                <p className="text-[38px] font-semibold text-[var(--hero-fg)] leading-none tabular-nums mt-3">
                   {totals.pending}
                 </p>
-                <p className="text-[12px] text-[var(--accent-contrast)]/85 leading-relaxed mt-2">
+                <p className="text-[12px] text-[var(--hero-fg)]/85 leading-relaxed mt-2">
                   {totals.pending > 0
                     ? 'Analysed slides become part of the record only once a qualified pathologist confirms or corrects the grade.'
                     : 'No slides are waiting. Every analysed slide carries a signature.'}

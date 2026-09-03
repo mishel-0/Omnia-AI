@@ -40,12 +40,27 @@
     --accent-border: rgba(14, 165, 233, 0.28);
     --accent-contrast: #FFFFFF; /* text placed on top of --accent */
 
+    /* The one large filled panel on the dashboard. Given its own tokens rather
+       than borrowing the button palette, because a hover state and a hero fill
+       want opposite things from a theme. */
+    /* Measured, not chosen by eye: white on the old sky-500 start was 2.77:1,
+       under even the 3:1 large-text floor, and the card also carries 12px body
+       copy at 85% opacity. sky-700 gives 5.93:1 with headroom to spare. */
+    --hero-from: #0369A1;
+    --hero-to: #075985;
+    --hero-fg: #FFFFFF;
+
     --card-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 12px rgba(16, 24, 40, 0.04);
     --card-shadow-raised: 0 2px 4px rgba(16, 24, 40, 0.06), 0 12px 28px rgba(16, 24, 40, 0.10);
     --switch-track: rgba(120, 120, 128, 0.16);
     --chrome-bg: rgba(255, 255, 255, 0.72);
     --chrome-highlight: rgba(255, 255, 255, 0.85);
     --sidebar-bg: #FFFFFF;
+    /* A menu floats over content, unlike the chrome bar, which sits over a
+       scrolling page by design. It needs to be readable, not see-through:
+       at the bar's 0.72 the button underneath was legible straight through
+       the panel. */
+    --panel-bg: rgba(255, 255, 255, 0.94);
     --cc-module: rgba(120, 120, 128, 0.08);
     --cc-tile-hover: rgba(120, 120, 128, 0.14);
   }
@@ -82,6 +97,13 @@
     --accent-border: rgba(56, 189, 248, 0.32);
     --accent-contrast: #04263A; /* dark text on a bright accent fill */
 
+    /* Deep blues on dark, so the panel sits *in* the interface rather than
+       glowing out of it — and so its figures can be near-white instead of the
+       near-black a bright fill would require. */
+    --hero-from: #0C4A6E;
+    --hero-to: #075985;
+    --hero-fg: #F0F9FF;
+
     /* Depth on a dark ground comes from the border, not the shadow — a black
        shadow on near-black is not visible at all. */
     --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.36);
@@ -90,6 +112,7 @@
     --chrome-bg: rgba(20, 20, 26, 0.68);
     --chrome-highlight: rgba(255, 255, 255, 0.07);
     --sidebar-bg: #16161C;
+    --panel-bg: rgba(28, 28, 34, 0.96);
     --cc-module: rgba(255, 255, 255, 0.06);
     --cc-tile-hover: rgba(255, 255, 255, 0.12);
   }
@@ -548,7 +571,7 @@
    belong together sit on one tile, and the eye reads three modules faster
    than nine identical lines. */
 .cc-panel {
-  background: var(--chrome-bg);
+  background: var(--panel-bg);
   -webkit-backdrop-filter: saturate(180%) blur(30px);
   backdrop-filter: saturate(180%) blur(30px);
   border: 1px solid var(--border-subtle);

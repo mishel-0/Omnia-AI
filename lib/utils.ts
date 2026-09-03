@@ -35,3 +35,18 @@ export function initials(name?: string | null, fallback = '?'): string {
   if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
+
+/** "Just now", "5h ago", "2 days ago" — and an honest answer for never. */
+export function relativeTime(iso?: string | null, never = 'Never'): string {
+  if (!iso) return never;
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return never;
+  const mins = Math.floor((Date.now() - then) / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
+  return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}

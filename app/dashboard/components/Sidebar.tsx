@@ -59,6 +59,9 @@ const SYSTEM: Item[] = [
   { label: 'Models', href: '/dashboard/training', icon: GraduationCap, show: (_r, w) => !!w },
   { label: 'Settings', href: '/dashboard/settings', icon: SettingsIcon, show: () => true },
 ];
+// System Health deliberately stays out of the rail: /admin is its own route
+// outside this segment, so selecting it here would make the whole shell —
+// rail included — disappear mid-navigation. It lives in the account menu.
 
 export default function Sidebar() {
   const router = useRouter();

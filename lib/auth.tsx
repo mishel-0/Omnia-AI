@@ -11,6 +11,10 @@ export interface AuthUser {
   full_name: string;
   role: Role;
   active: boolean;
+  /** Stamped when this account's credential was last accepted. Absent on an
+   *  account that has never signed in, and on any record written before the
+   *  field existed — so treat a missing value as unknown, not as "never". */
+  last_login?: string;
 }
 
 export const ROLE_LABELS: Record<Role, string> = {
