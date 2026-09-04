@@ -5,13 +5,23 @@ truncates the target file before writing, so an interruption mid-write leaves a
 corrupted (or empty) store and destroys every record in it.
 
 These helpers:
-  * write atomically (temp file in the same directory, fsync, then os.replace)
+  * write atomically (temp file in the same directory, fsync the file and the
+    directory, then os.replace)
   * quarantine a corrupted file instead of crashing every subsequent request
   * serialise writes through a process-wide lock
+
+The boundary this module depends on
+-----------------------------------
+The lock is a threading lock, so it only orders writers *inside one process*.
+Every guarantee here holds because the backend runs as a single uvicorn
+worker, which is how the desktop app launches it. Running `uvicorn --workers N`
+would not fail loudly — it would simply void atomicity, and concurrent writers
+in different processes would resume silently discarding each other's records.
+If this ever needs to scale past one process, the answer is file locking
+(fcntl.flock) or a real database, not a bigger threading lock.
 """
 import json
 import os
-import shutil
 import tempfile
 import threading
 import datetime
@@ -56,7 +66,14 @@ def read_json(path: Path, default):
                 path.suffix + f".corrupt-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
             )
             try:
-                shutil.copy2(path, quarantine)
+                # Move, not copy. Copying left the unreadable original in
+                # place, so the next read quarantined it again under a new
+                # timestamp — and the dashboard polls. A corrupt patients.json
+                # therefore produced a fresh full copy roughly every second,
+                # indefinitely, until the disk filled: the recovery mechanism
+                # became a worse outage than the corruption. Moving it means
+                # this branch is taken exactly once.
+                os.replace(path, quarantine)
             except OSError:
                 quarantine = None
             logger.error(
@@ -77,6 +94,18 @@ def write_json(path: Path, data):
                 f.flush()
                 os.fsync(f.fileno())
             os.replace(tmp, path)
+            # Syncing the file's contents makes the data durable; syncing the
+            # directory is what makes the *rename* durable. Without it a power
+            # cut can lose the replace even though the bytes were written —
+            # which is precisely the failure this module claims to survive.
+            try:
+                dir_fd = os.open(str(path.parent), os.O_RDONLY)
+                try:
+                    os.fsync(dir_fd)
+                finally:
+                    os.close(dir_fd)
+            except (OSError, AttributeError):
+                pass  # not supported on this platform (notably Windows)
         except BaseException:
             try:
                 os.unlink(tmp)

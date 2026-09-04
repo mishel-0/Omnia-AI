@@ -268,6 +268,38 @@ def update_patient(uid: str, updates: dict) -> Optional[dict]:
     return None
 
 
+def redact(uid: str) -> Optional[dict]:
+    """Clear every direct identifier, keeping the pseudonymous record.
+
+    Separate from update_patient rather than widening its whitelist. That
+    whitelist is what stops an ordinary PATCH from writing arbitrary keys into
+    a clinical record, and the redaction flags are exactly the kind of field
+    that must not be settable that way: a record marked redacted without
+    having been redacted is worse than one that was never marked at all.
+    """
+    _init()
+    try:
+        uid = normalise_uid(uid)
+    except ValidationError:
+        return None
+    stamp = datetime.datetime.now(datetime.timezone.utc).isoformat(
+        timespec="seconds").replace("+00:00", "Z")
+    with transaction():
+        registry = _read_registry()
+        for p in registry:
+            if p["uid"] == uid:
+                p["initials"] = ""
+                p["year_of_birth"] = None
+                p["sex"] = ""
+                p["site"] = ""
+                p["notes"] = ""
+                p["redacted"] = True
+                p["redacted_at"] = stamp
+                _write_registry(registry)
+                return p
+    return None
+
+
 # ─── Stored reports ───
 #
 # Reports used to be generated and streamed straight to the browser, so a

@@ -10,7 +10,7 @@ export const ACCENT = {
   yellow: { bg: '#FFCC00', tint: 'rgba(255, 204, 0, 0.14)' },
   green: { bg: '#34C759', tint: 'rgba(52, 199, 89, 0.12)' },
   teal: { bg: '#30B0C7', tint: 'rgba(48, 176, 199, 0.12)' },
-  blue: { bg: '#007AFF', tint: 'rgba(0, 122, 255, 0.12)' },
+  blue: { bg: 'var(--accent)', tint: 'var(--accent-soft)' },
   indigo: { bg: '#5856D6', tint: 'rgba(88, 86, 214, 0.12)' },
   purple: { bg: '#AF52DE', tint: 'rgba(175, 82, 222, 0.12)' },
   pink: { bg: '#FF2D55', tint: 'rgba(255, 45, 85, 0.12)' },
@@ -41,10 +41,10 @@ export function Card({
   children,
   ...rest
 }: React.HTMLAttributes<HTMLDivElement> & { size?: 'sm' | 'md' | 'lg' }) {
-  const radius = size === 'lg' ? 'rounded-[28px]' : size === 'sm' ? 'rounded-[16px]' : 'rounded-[20px]';
+  const radius = size === 'lg' ? 'rounded-[30px]' : size === 'sm' ? 'rounded-[20px]' : 'rounded-[24px]';
   return (
     <div
-      className={cn('health-card theme-transition', radius, className)}
+      className={cn('health-card', radius, className)}
       {...rest}
     >
       {children}
@@ -150,7 +150,7 @@ export function Pill({
 }
 
 const BUTTON_BASE =
-  'inline-flex items-center justify-center gap-2 font-semibold transition-all active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none';
+  'inline-flex items-center justify-center gap-2 font-semibold transition-colors disabled:opacity-40 disabled:pointer-events-none';
 
 export function Button({
   variant = 'primary',
@@ -162,13 +162,19 @@ export function Button({
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
 }) {
+  // Pills. A button is a thing you press, and a fully rounded edge says so
+  // without a label having to.
   const sizes = {
-    sm: 'text-[13px] px-3.5 py-2 rounded-[10px]',
-    md: 'text-[14px] px-5 py-3 rounded-[12px]',
-    lg: 'text-[16px] px-6 py-3.5 rounded-[14px]',
+    sm: 'text-[13px] px-4 py-2 rounded-full',
+    md: 'text-[14px] px-5 py-3 rounded-full',
+    lg: 'text-[16px] px-6 py-3.5 rounded-full',
   };
   const variants = {
-    primary: 'bg-[#007AFF] hover:bg-[#0066CC] text-white shadow-sm shadow-[#007AFF]/20',
+    // Text colour comes from a token, not a literal `text-white`. The accent is
+    // a deep sky blue on light and a bright one on dark; white on the bright
+    // variant is roughly 2:1 and fails contrast, so each theme supplies the
+    // label colour that actually reads on its own accent.
+    primary: 'bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-contrast)] shadow-sm shadow-[var(--accent-soft)]',
     secondary: 'bg-[var(--skeleton-bg)] hover:bg-[var(--border-medium)] text-[var(--text-primary)]',
     danger: 'bg-[#FF3B30]/10 hover:bg-[#FF3B30]/15 text-[#FF3B30]',
     ghost: 'bg-transparent hover:bg-[var(--skeleton-bg)] text-[var(--text-secondary)]',
@@ -180,9 +186,266 @@ export function Button({
   );
 }
 
+/** A pill-shaped control — the toolbar/filter button of the reference design.
+ *
+ * Fully rounded, quiet surface, no press animation. The whole feedback
+ * vocabulary is a colour change, which is what Apple's own Health UI does; a
+ * control that shrinks under the cursor reads as a toy.
+ */
+export function PillButton({
+  icon: Icon,
+  active,
+  className,
+  children,
+  ...rest
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  icon?: React.ElementType;
+  active?: boolean;
+}) {
+  return (
+    <button
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[12.5px] font-medium',
+        'transition-colors whitespace-nowrap focus:outline-none',
+        'focus-visible:ring-2 focus-visible:ring-[var(--accent)]',
+        active
+          ? 'bg-[var(--accent)] text-[var(--accent-contrast)]'
+          : 'bg-[var(--bg-card-solid)] border border-[var(--border-subtle)] text-[var(--text-primary)] hover:border-[var(--border-medium)]',
+        className,
+      )}
+      {...rest}
+    >
+      {Icon && <Icon className="w-3.5 h-3.5 shrink-0" />}
+      {children}
+    </button>
+  );
+}
+
+/** A card's title row, with an optional pill action on the right — the
+ *  "Health Report Pending / Report" and "My Doctor / See Details" pattern. */
+export function CardHeader({
+  title,
+  action,
+  className,
+}: {
+  title: React.ReactNode;
+  action?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn('flex items-center justify-between gap-3 mb-4', className)}>
+      <h3 className="text-[14px] font-semibold tracking-[-0.2px]">{title}</h3>
+      {action}
+    </div>
+  );
+}
+
+/** An area chart with a soft gradient fill.
+ *
+ * Values are plotted against a caller-supplied `max` rather than the data's own
+ * range. Auto-scaling to the data makes a two-point difference fill the card
+ * and read as a dramatic swing — the wrong impression for a clinical figure,
+ * where the size of a change is the thing being judged.
+ */
+export function AreaChart({
+  points,
+  max,
+  height = 96,
+  labels,
+  className,
+}: {
+  points: number[];
+  max: number;
+  height?: number;
+  labels?: string[];
+  className?: string;
+}) {
+  const id = React.useId();
+  if (points.length === 0) return null;
+
+  const w = 300, padT = 6, padB = labels?.length ? 18 : 6;
+  const plotH = height - padT - padB;
+  const top = Math.max(max, 1);
+  const x = (i: number) => points.length === 1 ? w / 2 : (i / (points.length - 1)) * w;
+  const y = (v: number) => padT + (1 - Math.min(v, top) / top) * plotH;
+
+  const line = points.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const area = `${x(0)},${padT + plotH} ${line} ${x(points.length - 1)},${padT + plotH}`;
+
+  return (
+    <svg viewBox={`0 0 ${w} ${height}`} className={cn('w-full', className)}
+         style={{ height }} preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <linearGradient id={`ac-${id}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.22" />
+          <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {[0, 0.5, 1].map((f) => (
+        <line key={f} x1="0" x2={w} y1={padT + f * plotH} y2={padT + f * plotH}
+              stroke="var(--border-subtle)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+      ))}
+      {points.length > 1 && <polygon points={area} fill={`url(#ac-${id})`} />}
+      <polyline
+        points={line}
+        fill="none"
+        stroke="var(--accent)"
+        strokeWidth="2"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      {points.map((v, i) => (
+        <circle key={i} cx={x(i)} cy={y(v)} r="3"
+                fill="var(--accent)" stroke="var(--bg-card-solid)" strokeWidth="2"
+                vectorEffect="non-scaling-stroke" />
+      ))}
+    </svg>
+  );
+}
+
+/** An iOS-style switch.
+ *
+ * A real <button role="switch">, not a styled checkbox, so it announces its
+ * state to assistive technology and takes focus and the space bar the way a
+ * control on macOS does. The knob moves on a spring-like curve rather than a
+ * linear one — the difference between "an element translated" and "a physical
+ * switch flicked" is entirely in the easing.
+ */
+export function Toggle({
+  checked,
+  onChange,
+  label,
+  disabled,
+  className,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  label?: string;
+  disabled?: boolean;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={cn(
+        'relative inline-flex items-center shrink-0 rounded-full ios-spring',
+        'w-[51px] h-[31px] p-[2px] focus:outline-none',
+        'focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2',
+        'focus-visible:ring-offset-[var(--bg-card-solid)]',
+        disabled && 'opacity-40 pointer-events-none',
+        className,
+      )}
+      style={{ background: checked ? 'var(--accent)' : 'var(--switch-track)' }}
+    >
+      <span
+        className="block w-[27px] h-[27px] rounded-full bg-white ios-spring"
+        style={{
+          transform: `translateX(${checked ? 20 : 0}px)`,
+          boxShadow: '0 3px 8px rgba(0,0,0,0.15), 0 1px 1px rgba(0,0,0,0.16)',
+        }}
+      />
+    </button>
+  );
+}
+
+/** A grouped settings row — label, optional description, control on the right.
+ *  The inset-grouped list macOS and iOS use for every settings screen. */
+export function SettingRow({
+  title,
+  description,
+  control,
+  className,
+}: {
+  title: string;
+  description?: string;
+  control?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn('flex items-center justify-between gap-4 px-4 py-3.5', className)}>
+      <div className="min-w-0">
+        <p className="text-[13px] font-medium">{title}</p>
+        {description && (
+          <p className="text-[11.5px] text-[var(--text-secondary)] leading-relaxed mt-0.5">
+            {description}
+          </p>
+        )}
+      </div>
+      {control && <div className="shrink-0">{control}</div>}
+    </div>
+  );
+}
+
+/** A titled group of setting rows, hairline-separated. */
+export function SettingGroup({
+  title,
+  footnote,
+  children,
+}: {
+  title: string;
+  footnote?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="mb-6">
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.6px] text-[var(--text-secondary)] px-1 mb-2">
+        {title}
+      </h2>
+      <Card size="sm" className="divide-y divide-[var(--border-subtle)] overflow-hidden">
+        {children}
+      </Card>
+      {footnote && (
+        <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed px-1 mt-2">
+          {footnote}
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** A macOS segmented control — the Light / Dark / System picker. */
+export function Segmented<T extends string>({
+  value,
+  options,
+  onChange,
+  className,
+}: {
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+  className?: string;
+}) {
+  return (
+    <div className={cn('inline-flex items-center gap-0.5 p-0.5 rounded-[9px] bg-[var(--switch-track)]', className)}>
+      {options.map((o) => (
+        <button
+          key={o.value}
+          onClick={() => onChange(o.value)}
+          aria-pressed={value === o.value}
+          className={cn(
+            'px-3 py-1 rounded-[7px] text-[12px] font-medium transition-colors duration-200',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]',
+            value === o.value
+              ? 'bg-[var(--bg-card-solid)] text-[var(--text-primary)] shadow-sm'
+              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** Shimmering placeholder block for content that's still loading. */
-export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn('skeleton-shimmer rounded-[6px]', className)} />;
+export function Skeleton({ className, ...rest }: React.HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn('skeleton-shimmer rounded-[6px]', className)} {...rest} />;
 }
 
 /** Skeleton rows shaped like a data table, shown while the real rows load. */
@@ -197,6 +460,64 @@ export function TableSkeleton({ rows = 5, columns = 5 }: { rows?: number; column
         </div>
       ))}
     </div>
+  );
+}
+
+/** A placeholder shaped like the card it is standing in for.
+ *
+ * A spinner says "wait" and nothing else. A placeholder that matches the
+ * layout about to appear tells the reader where things will be, and stops the
+ * page jumping when data lands — the loading state and the loaded state occupy
+ * the same space. The shimmer is the only motion, and it is what makes this
+ * read as loading rather than as an empty card.
+ */
+export function CardSkeleton({ lines = 3, className }: { lines?: number; className?: string }) {
+  return (
+    <Card size="sm" className={cn('p-5', className)}>
+      <div className="flex items-center gap-2.5 mb-4">
+        <Skeleton className="w-8 h-8 rounded-[10px]" />
+        <Skeleton className="h-3 w-28" />
+      </div>
+      <Skeleton className="h-7 w-20 mb-3" />
+      <div className="space-y-2">
+        {Array.from({ length: lines }).map((_, i) => (
+          <Skeleton
+            key={i}
+            className="h-2.5"
+            // Uneven widths read as text; equal bars read as a broken table.
+            style={{ width: `${[92, 74, 58, 66][i % 4]}%` }}
+          />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+/** A grid of card placeholders, for a section that loads as a set. */
+export function CardGridSkeleton({ count = 3, lines = 3 }: { count?: number; lines?: number }) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {Array.from({ length: count }).map((_, i) => (
+        <CardSkeleton key={i} lines={lines} />
+      ))}
+    </div>
+  );
+}
+
+/** Small inline spinner for a button or a row — the one place a spinner is
+ *  right, because there is no layout to stand in for. */
+export function Spinner({ size = 14, className }: { size?: number; className?: string }) {
+  return (
+    <span
+      className={cn('inline-block rounded-full border-2 animate-spin align-[-2px]', className)}
+      style={{
+        width: size, height: size,
+        borderColor: 'var(--border-medium)',
+        borderTopColor: 'var(--accent)',
+        animationDuration: '0.7s',
+      }}
+      aria-hidden="true"
+    />
   );
 }
 

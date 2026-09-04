@@ -12,6 +12,10 @@ datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 # relative to the frozen app (see grading_model.MODEL_PATH).
 datas += [('backend/models/omnia_prostate_v1.pt', 'backend/models')]
 
+# The release notes ship with the build so the notes a site reads are the notes
+# for the version they are running, rather than whatever a website serves today.
+datas += [('CHANGELOG.md', '.')]
+
 # torch/torchvision have a lot of non-Python payload (native libs, ATen
 # kernels) that plain hiddenimports won't catch — collect_all pulls in
 # everything PyInstaller's static analysis would otherwise miss.
@@ -65,23 +69,49 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 
+# onedir, not onefile.
+#
+# A onefile executable is an archive with a bootloader stapled to the front: on
+# every launch it unpacks the whole payload — torch, torchvision, the ATen
+# kernels, the checkpoint — into a temporary directory before the server can
+# start. That cost is paid at each start and grows with the bundle. Measured on
+# this machine it had reached 48 seconds from launch to the backend answering
+# /health, and it was climbing: 33s, then 48s, then 57s across three builds.
+# It is also the first thing anyone sees after installing.
+#
+# onedir ships the same payload already unpacked, so start-up is the process
+# launching rather than the process launching plus a decompression. The app
+# bundle gains a directory of libraries instead of one large binary, which
+# nobody sees — macOS shows the .app, and Windows shows the installer.
+#
+# sys._MEIPASS still resolves: under PyInstaller 6 the onedir layout puts data
+# in _internal/ and points _MEIPASS at it, so grading_model._resource_dir()
+# finds the checkpoint without changing.
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
+    exclude_binaries=True,
     name='omnia-backend',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
     upx_exclude=[],
-    runtime_tmpdir=None,
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='omnia-backend',
 )

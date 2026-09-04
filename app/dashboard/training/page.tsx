@@ -3,13 +3,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  ArrowLeft, Cpu, MemoryStick, HardDrive, Zap, Database, GraduationCap,
-  Play, Square, CheckCircle2, AlertTriangle, FlaskConical, Info, History, ShieldCheck,
+  Cpu, MemoryStick, HardDrive, Zap, Database, GraduationCap,
+  Play, Square, CheckCircle2, AlertTriangle, FlaskConical, Info, History, ShieldCheck, ChevronRight,
 } from 'lucide-react';
 import { Card, Button, Pill, TableSkeleton } from '@/components/ui';
 import { apiFetch, apiSend, useAuth, canWrite } from '@/lib/auth';
 import { useToast } from '@/lib/toast';
 import { useDialogs } from '@/lib/dialogs';
+import NetworkPanel from './NetworkPanel';
 
 interface Hardware {
   os: string; arch: string; cpu_name: string;
@@ -72,7 +73,7 @@ function InfoDot({ text }: { text: string }) {
       <button
         type="button"
         aria-label={text}
-        className="w-[13px] h-[13px] rounded-full border border-[var(--border-medium)] text-[9px] leading-none font-semibold text-[var(--text-secondary)] flex items-center justify-center hover:border-[#007AFF] hover:text-[#007AFF] focus:outline-none focus:ring-2 focus:ring-[#007AFF] transition-colors"
+        className="w-[13px] h-[13px] rounded-full border border-[var(--border-medium)] text-[9px] leading-none font-semibold text-[var(--text-secondary)] flex items-center justify-center hover:border-[var(--accent)] hover:text-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] transition-colors"
       >
         ?
       </button>
@@ -121,7 +122,7 @@ function LossChart({ history }: { history: { epoch: number; loss: number; qwk: n
         Training loss
       </p>
       <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-[42px]" preserveAspectRatio="none">
-        <polyline points={pts} fill="none" stroke="#007AFF" strokeWidth="1.5"
+        <polyline points={pts} fill="none" stroke="var(--accent)" strokeWidth="1.5"
                   vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
       </svg>
     </div>
@@ -227,12 +228,10 @@ export default function TrainingPage() {
 
   if (loading || !data) {
     return (
-      <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
-        <div className="titlebar-inset border-b border-[var(--border-subtle)] pr-6 py-3.5 bg-[var(--bg-card-solid)]">
+      <div className="">
+        <div className="max-w-[1200px] px-7 pt-6 pb-10">
           <div className="w-44 h-3.5 rounded-[4px] skeleton-shimmer mb-1.5" />
-          <div className="w-64 h-2.5 rounded-[4px] skeleton-shimmer" />
-        </div>
-        <div className="max-w-5xl mx-auto px-6 py-6">
+          <div className="w-64 h-2.5 rounded-[4px] skeleton-shimmer mb-5" />
           <Card size="sm" className="overflow-hidden"><TableSkeleton rows={4} columns={4} /></Card>
         </div>
       </div>
@@ -244,11 +243,22 @@ export default function TrainingPage() {
   const pct = Math.round((run?.progress ?? 0) * 100);
 
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
-      <div className="titlebar-inset border-b border-[var(--border-subtle)] pr-6 py-3.5 flex items-center gap-3 bg-[var(--bg-card-solid)]">
-        <button onClick={() => router.push('/dashboard')} className="p-1.5 rounded-[8px] hover:bg-[var(--skeleton-bg)]">
-          <ArrowLeft className="w-4 h-4" />
+    <div className="">
+      <div className="max-w-[1200px] px-7 pt-6">
+      {/* Breadcrumb rather than a back button in a strip of its own. The strip
+          was left over from before there was a shell to come back to: it
+          carried an 84px inset meant to clear window buttons that are now two
+          hundred pixels away, and a second horizontal rule under a header that
+          already draws one. */}
+      <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[12.5px] mb-4">
+        <button onClick={() => router.push('/dashboard')}
+                className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
+          Dashboard
         </button>
+        <ChevronRight className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+        <span className="font-medium text-[var(--accent)]" aria-current="page">Models</span>
+      </nav>
+      <div className="flex items-center gap-3">
         <div>
           <h1 className="text-[15px] font-semibold">Model Training</h1>
           <p className="text-[11px] text-[var(--text-secondary)]">
@@ -257,7 +267,7 @@ export default function TrainingPage() {
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-6 space-y-5">
+      <div className="mt-6 pb-10 space-y-5">
         {/* Which model is grading right now. This is the first thing a
             pathologist needs from this screen — not the hardware, not the
             history — because it determines how to read every result the app
@@ -307,8 +317,8 @@ export default function TrainingPage() {
         {/* What this is — knowledge first, so the page is self-explanatory */}
         <Card size="sm" className="p-5">
           <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-[10px] bg-[#007AFF]/10 flex items-center justify-center shrink-0">
-              <GraduationCap className="w-[18px] h-[18px] text-[#007AFF]" />
+            <div className="w-9 h-9 rounded-[10px] bg-[var(--accent-soft)] flex items-center justify-center shrink-0">
+              <GraduationCap className="w-[18px] h-[18px] text-[var(--accent)]" />
             </div>
             <div>
               <h2 className="text-[14px] font-semibold">What training does</h2>
@@ -354,6 +364,10 @@ export default function TrainingPage() {
             </div>
           </div>
         </Card>
+
+        {/* Federated network — send this device's fine-tune to be merged
+            with other sites' corrections, never their raw data. */}
+        <NetworkPanel />
 
         {/* Hardware */}
         <Card size="sm" className="p-5">
@@ -508,7 +522,7 @@ export default function TrainingPage() {
                   style={{
                     width: `${pct}%`,
                     background: run.state === 'completed' ? '#34C759'
-                      : run.state === 'failed' ? '#FF3B30' : '#007AFF',
+                      : run.state === 'failed' ? '#FF3B30' : 'var(--accent)',
                   }}
                 />
               </div>
@@ -596,6 +610,7 @@ export default function TrainingPage() {
               </div>
           </Card>
         )}
+      </div>
       </div>
     </div>
   );

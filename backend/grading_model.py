@@ -449,12 +449,19 @@ def predict(filepath: str) -> dict:
     integration test suite only. Real .svs/.tiff whole-slide files aren't
     something a test fixture can fake cheaply, and the test suite's dummy
     upload content (`b"x" * 1000`) is correctly rejected by real openslide
-    I/O — as it should be outside tests. This env var must never be set in
-    a real deployment; nothing checks for it anywhere except here.
+    I/O — as it should be outside tests. See backend/testmode.py: the flag
+    is refused outright in a packaged build and reported by /health and
+    preflight everywhere else, so a fabricated grade can never be mistaken
+    for a real one.
     """
-    if os.environ.get("OMNIA_TEST_FAKE_GRADING") == "1":
+    from backend import testmode
+
+    if testmode.active():
         return {"grade_group": 3, "confidence": 0.9, "raw_score": 3.0, "tiles_used": N_TILES,
-                "slide_width": 1000, "slide_height": 1000, "regions": []}
+                "slide_width": 1000, "slide_height": 1000, "regions": [],
+                # Travels with the result so anything that stores or renders
+                # it can tell this was not produced by the model.
+                "fabricated": True}
 
     # Bound how many analyses run at once — see MAX_CONCURRENT_ANALYSES.
     # Fail fast when saturated rather than queueing unboundedly and taking

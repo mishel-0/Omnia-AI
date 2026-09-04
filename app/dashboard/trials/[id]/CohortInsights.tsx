@@ -76,7 +76,7 @@ export function CohortInsights({ trialId }: { trialId: string }) {
         className="w-full flex items-center justify-between gap-2 px-4 py-3 hover:bg-[var(--skeleton-bg)] transition-colors text-left"
       >
         <span className="flex items-center gap-2">
-          <BarChart3 className="w-4 h-4 text-[#007AFF]" />
+          <BarChart3 className="w-4 h-4 text-[var(--accent)]" />
           <span className="text-[13px] font-semibold">Cohort analytics</span>
           <span className="text-[10px] text-[var(--text-secondary)]">
             {data.subject_count} subject{data.subject_count === 1 ? '' : 's'} · {data.graded_slide_count} graded slides

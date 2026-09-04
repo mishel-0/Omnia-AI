@@ -6,7 +6,7 @@ import { CheckCircle, XCircle, Key, User, Lock, UserPlus } from 'lucide-react';
 import { Card, Button, BrandMark } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { apiBase } from '@/lib/constants';
 
 type Stage = 'checking' | 'license' | 'auth';
 
@@ -38,7 +38,7 @@ export default function LoginPage() {
       return;
     }
 
-    fetch(`${API_BASE}/api/license/status`)
+    fetch(`${apiBase()}/api/license/status`)
       .then((r) => r.json())
       .then((data) => {
         if (data.valid) {
@@ -61,7 +61,7 @@ export default function LoginPage() {
 
   const checkAuthStage = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/users/bootstrap-needed`);
+      const res = await fetch(`${apiBase()}/api/users/bootstrap-needed`);
       const data = await res.json();
       setNeedsBootstrap(!!data.needed);
     } catch {
@@ -74,7 +74,7 @@ export default function LoginPage() {
     if (!licenseKey.trim()) return;
     setLicenseStatus('validating');
     try {
-      const res = await fetch(`${API_BASE}/api/license/activate`, {
+      const res = await fetch(`${apiBase()}/api/license/activate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: licenseKey.trim() }),
@@ -149,7 +149,7 @@ export default function LoginPage() {
                 onChange={(e) => setLicenseKey(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && activateLicense()}
                 placeholder="Enter your license key…"
-                className="w-full px-4 py-3 rounded-[12px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 focus:outline-none focus:ring-2 focus:ring-[#007AFF] font-mono text-[13px]"
+                className="w-full px-4 py-3 rounded-[12px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--accent)] font-mono text-[13px]"
                 disabled={licenseStatus === 'validating'}
               />
               <Button
@@ -191,7 +191,7 @@ export default function LoginPage() {
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Full name (e.g. Dr. Jane Smith)"
-                  className="w-full px-4 py-3 rounded-[12px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 focus:outline-none focus:ring-2 focus:ring-[#007AFF] text-[13px]"
+                  className="w-full px-4 py-3 rounded-[12px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--accent)] text-[13px]"
                 />
               )}
               <input
@@ -200,7 +200,7 @@ export default function LoginPage() {
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="Username"
                 autoComplete="username"
-                className="w-full px-4 py-3 rounded-[12px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 focus:outline-none focus:ring-2 focus:ring-[#007AFF] text-[13px]"
+                className="w-full px-4 py-3 rounded-[12px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--accent)] text-[13px]"
               />
               <input
                 type="password"
@@ -209,7 +209,7 @@ export default function LoginPage() {
                 onKeyDown={(e) => e.key === 'Enter' && submitAuth()}
                 placeholder="Password"
                 autoComplete={needsBootstrap ? 'new-password' : 'current-password'}
-                className="w-full px-4 py-3 rounded-[12px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 focus:outline-none focus:ring-2 focus:ring-[#007AFF] text-[13px]"
+                className="w-full px-4 py-3 rounded-[12px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--accent)] text-[13px]"
               />
             </div>
 

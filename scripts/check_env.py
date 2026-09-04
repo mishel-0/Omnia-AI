@@ -33,14 +33,19 @@ check("Python version", py.major == 3 and py.minor >= 9,
       f"Python {py.major}.{py.minor}.{py.micro} ({sys.executable})")
 
 # ── 2. Critical Python packages (check both 3.9 and 3.14) ──
+# What this product actually imports. This listed pydicom and httpx, and the
+# model check below looked for ARIA radiology checkpoints — both from the
+# retired DICOM product — so the script reported hard failures on a healthy
+# pathology install every time it ran.
 REQUIRED_PIPS = {
     "torch": "ML model inference",
-    "pydicom": "DICOM file parsing",
+    "openslide": "Whole-slide image reading",
+    "cv2": "Tile preprocessing",
     "PIL": "Image processing",
     "fastapi": "API server",
     "uvicorn": "ASGI server",
     "numpy": "Array operations",
-    "httpx": "Ollama client (chat fallback)",
+    "reportlab": "Pathology report PDFs",
 }
 for pkg, purpose in REQUIRED_PIPS.items():
     try:
@@ -61,7 +66,10 @@ for pkg, purpose in REQUIRED_PIPS.items():
             check(f"pip: {pkg}", False, f"MISSING — needed for {purpose}")
 
 # ── 3. Model files ──
-for fname in ["aria_model_dicom.pth", "aria_model.pth", "aria_model_config.json"]:
+# The grading model that actually ships. The three ARIA files this used to
+# demand belonged to the retired DICOM product and have never existed in this
+# repository, so this section failed on every run.
+for fname in [os.path.join("backend", "models", "omnia_prostate_v1.pt")]:
     path = os.path.join(ROOT, fname)
     exists = os.path.exists(path)
     size = os.path.getsize(path) if exists else 0
@@ -98,17 +106,13 @@ if os.path.exists(env_path):
 else:
     check(".env.local", False, "MISSING — backend won't connect from frontend")
 
-# ── 7. pynetdicom (optional, known broken) ──
-try:
-    import pynetdicom
-    check("pip: pynetdicom", True, "DICOM SCP available ✓")
-except ImportError:
-    check("pip: pynetdicom", True, "not installed (DICOM SCP disabled — no impact on core features)")
+# Two checks were removed here rather than updated, because neither could
+# fail. One reported a DICOM SCP from the retired product and passed in both
+# branches of its own try/except; the other passed a hardcoded True and
+# examined nothing at all. A check that always prints a tick measures nothing
+# and makes the summary line less trustworthy for the checks that do.
 
-# ── 8. httpx installed for Python 3.9 (backend runtime) ──
-check("httpx for Python 3.9", True, "installed ✓ (run: pip3 install httpx --break-system-packages if missing)")
-
-# ── 9. .next/ stale cache check ──
+# ── 7. .next/ stale cache check ──
 next_dir = os.path.join(ROOT, ".next")
 if os.path.exists(next_dir):
     build_id_path = os.path.join(next_dir, "build-manifest.json")

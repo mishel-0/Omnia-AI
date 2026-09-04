@@ -2,16 +2,17 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, FlaskConical, Users, Download, Trash2, ShieldCheck, ScrollText, LogOut, ChevronDown, Search, Archive, RotateCcw, BookOpen, GraduationCap, ArrowRight } from 'lucide-react';
-import { Card, Button, BrandMark, Pill, EmptyState, TableSkeleton } from '@/components/ui';
-import { apiFetch, apiSend, useAuth, canWrite, ROLE_LABELS } from '@/lib/auth';
+import { Plus, FlaskConical, Users, Download, Trash2, ScrollText, Search, Archive, RotateCcw, ArrowRight, Layers } from 'lucide-react';
+import { Card, Button, Pill, EmptyState, Skeleton, CardSkeleton,
+         PillButton, CardHeader, AreaChart } from '@/components/ui';
+import { apiFetch, apiSend, useAuth, canWrite } from '@/lib/auth';
 import { useToast } from '@/lib/toast';
 import { useDialogs } from '@/lib/dialogs';
-import { useOnboarding } from '@/lib/onboarding';
+import { cn } from '@/lib/utils';
 import CreateTrialDialog, { TrialDraft } from './components/CreateTrialDialog';
 import SystemHealth from './components/SystemHealth';
 
-interface Trial {
+export interface Trial {
   id: string;
   name: string;
   /** Added after first release — absent on trials registered before then. */
@@ -34,15 +35,13 @@ export default function TrialDashboard() {
   const [openQueries, setOpenQueries] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'closed'>('all');
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const writable = canWrite(user?.role);
   const toast = useToast();
   const { confirm } = useDialogs();
-  const { open: openGuide } = useOnboarding();
 
   const loadTrials = async () => {
     try {
@@ -191,7 +190,7 @@ export default function TrialDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
+      <div className="">
         <div className="border-b border-[var(--border-subtle)] px-6 py-3.5 flex items-center gap-3 bg-[var(--bg-card-solid)]">
           <div className="w-8 h-8 rounded-[8px] skeleton-shimmer" />
           <div className="space-y-1.5">
@@ -199,118 +198,34 @@ export default function TrialDashboard() {
             <div className="w-56 h-2.5 rounded-[4px] skeleton-shimmer" />
           </div>
         </div>
-        <div className="max-w-6xl mx-auto px-6 py-6">
-          <Card size="sm" className="overflow-hidden">
-            <TableSkeleton rows={4} columns={6} />
-          </Card>
+        {/* Mirrors the real layout — four stat cards, three overview cards,
+            then the trial grid — so nothing shifts position when the data
+            arrives. A centred spinner would tell the reader nothing about
+            what is coming and then move everything on load. */}
+        <div className="max-w-[1200px] px-7 pt-7">
+          <Skeleton className="h-6 w-64 rounded-[6px]" />
+          <Skeleton className="h-3 w-80 rounded-[4px] mt-2.5" />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Card key={i} size="sm" className="p-4">
+                <Skeleton className="h-3 w-24 mb-3" />
+                <Skeleton className="h-6 w-14" />
+              </Card>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-5">
+            {Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} lines={3} />)}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mt-5">
+            {Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} lines={4} />)}
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
-      {/* Top Bar */}
-      <div className="titlebar-drag titlebar-inset border-b border-[var(--border-subtle)] pr-6 py-3 flex items-center justify-between gap-4 bg-[var(--bg-card-solid)]">
-        <div className="flex items-center gap-2.5 shrink-0">
-          <BrandMark size={30} />
-          <div className="hidden lg:block">
-            <h1 className="text-[14px] font-semibold leading-tight">Omnia Pathology AI</h1>
-            <p className="text-[10px] text-[var(--text-secondary)] leading-tight">Research Use Only</p>
-          </div>
-        </div>
-
-        {/* Primary sections as pills. These were previously buried in the
-            account dropdown, which put the audit trail and user management
-            three clicks away from the screen a coordinator lives on. */}
-        <nav className="titlebar-no-drag flex items-center gap-1 min-w-0 overflow-x-auto">
-          <NavPill active label="Dashboard" onClick={() => {}} />
-          <NavPill label="Patients" onClick={() => router.push('/dashboard/patients')} />
-          {(user?.role === 'admin' || user?.role === 'monitor') && (
-            <NavPill label="Audit Trail" onClick={() => router.push('/dashboard/audit')} />
-          )}
-          {user?.role === 'admin' && (
-            <NavPill label="Users" onClick={() => router.push('/dashboard/users')} />
-          )}
-          {writable && (
-            <NavPill label="Model" onClick={() => router.push('/dashboard/training')} />
-          )}
-        </nav>
-
-        <div className="titlebar-no-drag flex items-center gap-2 shrink-0">
-          {writable && (
-            <Button size="sm" onClick={() => setShowCreate(true)}>
-              <Plus className="w-3.5 h-3.5" />
-              New Trial
-            </Button>
-          )}
-          <div className="relative">
-            <button
-              onClick={() => setShowMenu(v => !v)}
-              className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-[10px] hover:bg-[var(--skeleton-bg)] transition-colors"
-            >
-              <div className="w-6 h-6 rounded-full bg-[#007AFF]/10 flex items-center justify-center text-[11px] font-semibold text-[#007AFF] shrink-0">
-                {(user?.full_name || '?').charAt(0).toUpperCase()}
-              </div>
-              <div className="text-left hidden md:block">
-                <p className="text-[12px] font-medium leading-tight">{user?.full_name}</p>
-                <p className="text-[10px] text-[var(--text-secondary)] leading-tight">{user ? ROLE_LABELS[user.role] : ''}</p>
-              </div>
-              <ChevronDown className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
-            </button>
-            {showMenu && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-                <Card size="sm" className="absolute right-0 top-[calc(100%+6px)] w-[200px] z-50 p-1.5 shadow-xl">
-                  {user?.role === 'admin' && (
-                    <button
-                      onClick={() => { setShowMenu(false); router.push('/dashboard/users'); }}
-                      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-[8px] text-[12px] hover:bg-[var(--skeleton-bg)] text-left"
-                    >
-                      <Users className="w-3.5 h-3.5 text-[var(--text-secondary)]" /> Manage Users
-                    </button>
-                  )}
-                  {(user?.role === 'admin' || user?.role === 'monitor') && (
-                    <button
-                      onClick={() => { setShowMenu(false); router.push('/dashboard/audit'); }}
-                      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-[8px] text-[12px] hover:bg-[var(--skeleton-bg)] text-left"
-                    >
-                      <ScrollText className="w-3.5 h-3.5 text-[var(--text-secondary)]" /> Audit Trail
-                    </button>
-                  )}
-                  {writable && (
-                    <button
-                      onClick={() => { setShowMenu(false); router.push('/dashboard/training'); }}
-                      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-[8px] text-[12px] hover:bg-[var(--skeleton-bg)] text-left"
-                    >
-                      <GraduationCap className="w-3.5 h-3.5 text-[var(--text-secondary)]" /> Model Training
-                    </button>
-                  )}
-                  <button
-                    onClick={() => { setShowMenu(false); openGuide(); }}
-                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-[8px] text-[12px] hover:bg-[var(--skeleton-bg)] text-left"
-                  >
-                    <BookOpen className="w-3.5 h-3.5 text-[var(--text-secondary)]" /> Guide &amp; Help
-                  </button>
-                  <button
-                    onClick={() => { setShowMenu(false); router.push('/admin'); }}
-                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-[8px] text-[12px] hover:bg-[var(--skeleton-bg)] text-left"
-                  >
-                    <ShieldCheck className="w-3.5 h-3.5 text-[var(--text-secondary)]" /> System Health
-                  </button>
-                  <div className="h-px bg-[var(--border-subtle)] my-1" />
-                  <button
-                    onClick={async () => { await logout(); router.push('/login'); }}
-                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-[8px] text-[12px] hover:bg-[#FF3B30]/10 text-[#FF3B30] text-left"
-                  >
-                    <LogOut className="w-3.5 h-3.5" /> Sign Out
-                  </button>
-                </Card>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
+    <div className="">
 
       <SystemHealth />
 
@@ -319,92 +234,99 @@ export default function TrialDashboard() {
           widget. Hiding it until a trial exists meant a fresh install showed
           nothing but an empty state, so the dashboard looked unchanged on
           exactly the screen a new user sees first. Zero is a valid figure. */}
-      <div className="max-w-6xl mx-auto px-6 pt-7 pb-1">
-        <div className="flex items-end justify-between gap-6 flex-wrap">
-          <div>
-            <h2 className="text-[26px] font-semibold tracking-[-0.5px] leading-tight">
-              {greeting}, <span className="text-[#007AFF]">{displayName}</span>
-            </h2>
-            <p className="text-[12.5px] text-[var(--text-secondary)] mt-1">
-              {trials.length === 0
-                ? 'No trials yet — create one to begin.'
-                : totals.pending > 0
-                  ? `${totals.pending} slide${totals.pending === 1 ? '' : 's'} awaiting your review`
-                  : 'Everything analysed has been reviewed and signed'}
-            </p>
-          </div>
+      <div className="max-w-[1200px] px-7 pt-7 pb-1">
+        <h2 className="text-[26px] font-semibold tracking-[-0.5px] leading-tight">
+          {greeting}, <span className="text-[var(--accent)]">{displayName}</span>
+        </h2>
+        <p className="text-[12.5px] text-[var(--text-secondary)] mt-1">
+          {trials.length === 0
+            ? 'No trials yet — create one to begin.'
+            : totals.pending > 0
+              ? `${totals.pending} slide${totals.pending === 1 ? '' : 's'} awaiting your review`
+              : 'Everything analysed has been reviewed and signed'}
+        </p>
 
-          {/* Figures read left-to-right in the order a coordinator checks
-              them: how much work exists, how much is done, what is left. */}
-          <div className="flex items-stretch gap-6">
-            <Metric label="Patients" value={totals.patients} />
-            <Divider />
-            <Metric label="Slides analysed" value={totals.slides} />
-            <Divider />
-            <Metric
-              label="Awaiting review"
-              value={totals.pending}
-              accent={totals.pending > 0 ? '#FF9500' : undefined}
-            />
-          </div>
+        {/* Figures read left-to-right in the order a coordinator checks them:
+            how much work exists, how much is done, what is left. Cards rather
+            than a bare row of numbers with rules between them — every other
+            surface on this page is a card, and the header was the one place
+            that broke the grid. */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
+          <StatCard icon={Users} label="Patients" value={totals.patients}
+                    tone="#5856D6" sub="Total patients" />
+          <StatCard icon={Layers} label="Slides analysed" value={totals.slides}
+                    tone="var(--accent)" sub="Total slides" />
+          <StatCard
+            icon={ScrollText}
+            label="Awaiting review"
+            value={totals.pending}
+            tone="#FF9500"
+            sub="Slides"
+          />
+          <StatCard
+            icon={FlaskConical}
+            label="Active trials"
+            value={totals.active}
+            tone="#34C759"
+            sub={totals.trials !== totals.active ? `of ${totals.trials} in progress` : 'In progress'}
+          />
         </div>
       </div>
 
       {/* Trial List */}
-      <div className="max-w-6xl mx-auto px-6 py-6">
+      <div className="max-w-[1200px] px-7 py-6">
           {/* Overview row. Three cards: what is done, what needs a person,
               and how the portfolio is split. */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-5">
             {/* Review progress — real completion, not a decorative gauge */}
-            <div className="rounded-[16px] border border-[var(--border-subtle)] bg-[var(--bg-card-solid)] p-5">
-              <div className="flex items-center justify-between gap-2 mb-4">
-                <p className="text-[13px] font-semibold">Review progress</p>
-                <span className="text-[11px] text-[var(--text-secondary)] tabular-nums">
-                  {reviewedPct}%
-                </span>
-              </div>
-              <div className="flex items-end justify-start gap-1.5 h-[72px] mb-3">
-                {trialBars.length === 0 ? (
-                  <p className="text-[11px] text-[var(--text-secondary)]">No slides analysed yet.</p>
-                ) : trialBars.map((b) => (
-                  // Bars are capped in width and left-aligned. With flex-1 and
-                  // a single trial the "chart" became one solid slab filling
-                  // the card, which reads as a rendering fault rather than as
-                  // one trial's progress.
-                  <div key={b.id} className="flex-1 max-w-[40px] flex flex-col justify-end h-full min-w-[12px]" title={`${b.name}: ${b.confirmed}/${b.analyzed} signed`}>
-                    <div className="w-full rounded-t-[5px] bg-[var(--skeleton-bg)] relative" style={{ height: '100%' }}>
-                      <div
-                        className="absolute bottom-0 left-0 right-0 rounded-t-[5px] bg-[#007AFF]"
-                        style={{ height: `${b.pct}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="flex items-center gap-4 text-[11px] text-[var(--text-secondary)]">
+            <Card size="md" className="p-5">
+              <CardHeader
+                title="Review progress"
+                action={
+                  <span className="text-[11.5px] font-semibold text-[var(--accent)] bg-[var(--accent-soft)] rounded-full px-2.5 py-1 tabular-nums">
+                    {reviewedPct}%
+                  </span>
+                }
+              />
+              {trialBars.length === 0 ? (
+                <div className="h-[96px] flex items-center">
+                  <p className="text-[11.5px] text-[var(--text-secondary)]">
+                    No slides analysed yet — the curve appears once grading starts.
+                  </p>
+                </div>
+              ) : (
+                <AreaChart
+                  points={trialBars.map((b) => b.pct)}
+                  max={100}
+                  height={96}
+                />
+              )}
+              <div className="flex items-center gap-4 text-[11px] text-[var(--text-secondary)] mt-3">
                 <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-[2px] bg-[#007AFF]" /> Signed {totals.slides - totals.pending}
+                  <span className="w-2 h-2 rounded-full bg-[var(--accent)]" />
+                  Signed {totals.slides - totals.pending}
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-[2px] bg-[var(--skeleton-bg)] border border-[var(--border-subtle)]" /> Pending {totals.pending}
+                  <span className="w-2 h-2 rounded-full bg-[var(--skeleton-bg)] border border-[var(--border-subtle)]" />
+                  Pending {totals.pending}
                 </span>
               </div>
-            </div>
+            </Card>
 
             {/* The one accent card — deliberately the only saturated surface on
                 the page, so the eye lands on the outstanding work first. */}
-            <div className="rounded-[16px] p-5 flex flex-col justify-between" style={{ background: 'linear-gradient(145deg, #007AFF 0%, #0A63D6 100%)' }}>
+            <div className="rounded-[20px] p-5 flex flex-col justify-between" style={{ background: 'linear-gradient(145deg, var(--hero-from) 0%, var(--hero-to) 100%)' }}>
               <div>
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-[13px] font-semibold text-white/95">Needs a pathologist</p>
-                  <span className="text-[10px] font-medium text-white/80 bg-white/15 rounded-full px-2 py-0.5">
+                  <p className="text-[13px] font-semibold text-[var(--hero-fg)]/95">Needs a pathologist</p>
+                  <span className="text-[10px] font-medium text-[var(--hero-fg)]/80 bg-[var(--hero-fg)]/15 rounded-full px-2 py-0.5">
                     {totals.active} active
                   </span>
                 </div>
-                <p className="text-[38px] font-semibold text-white leading-none tabular-nums mt-3">
+                <p className="text-[38px] font-semibold text-[var(--hero-fg)] leading-none tabular-nums mt-3">
                   {totals.pending}
                 </p>
-                <p className="text-[12px] text-white/85 leading-relaxed mt-2">
+                <p className="text-[12px] text-[var(--hero-fg)]/85 leading-relaxed mt-2">
                   {totals.pending > 0
                     ? 'Analysed slides become part of the record only once a qualified pathologist confirms or corrects the grade.'
                     : 'No slides are waiting. Every analysed slide carries a signature.'}
@@ -413,7 +335,7 @@ export default function TrialDashboard() {
               {firstPendingTrial && (
                 <button
                   onClick={() => router.push(`/dashboard/trials/${firstPendingTrial.id}`)}
-                  className="mt-4 self-start inline-flex items-center gap-1.5 text-[12px] font-medium text-[#007AFF] bg-white rounded-full px-3.5 py-1.5 hover:bg-white/90 transition-colors"
+                  className="mt-4 self-start inline-flex items-center gap-1.5 text-[12px] font-medium text-[var(--accent)] bg-[var(--bg-card-solid)] rounded-full px-3.5 py-1.5 hover:bg-[var(--bg-card-solid)]/90 transition-colors"
                 >
                   Open {firstPendingTrial.name} <ArrowRight className="w-3.5 h-3.5" />
                 </button>
@@ -421,15 +343,15 @@ export default function TrialDashboard() {
             </div>
 
             {/* Portfolio split */}
-            <div className="rounded-[16px] border border-[var(--border-subtle)] bg-[var(--bg-card-solid)] p-5">
-              <p className="text-[13px] font-semibold mb-4">Portfolio</p>
+            <Card size="md" className="p-5">
+              <CardHeader title="Portfolio" />
               <div className="space-y-3">
                 <PortfolioRow label="Trials" value={totals.trials} />
                 <PortfolioRow label="Active" value={totals.active} accent="#34C759" />
                 <PortfolioRow label="Closed" value={totals.trials - totals.active} />
                 <PortfolioRow label="Open queries" value={totalOpenQueries} accent={totalOpenQueries > 0 ? '#FF9500' : undefined} />
               </div>
-            </div>
+            </Card>
           </div>
 
           {trials.length === 0 ? (
@@ -441,33 +363,35 @@ export default function TrialDashboard() {
             />
           ) : (
           <>
-          {/* Search + status filter */}
-          <div className="flex items-center gap-2 mb-3 flex-wrap">
-            <div className="relative flex-1 min-w-[220px]">
-              <Search className="w-3.5 h-3.5 text-[var(--text-secondary)] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          {/* Toolbar. Pill controls on the page ground rather than a boxed
+              filter bar — the search field is the one thing that has to be
+              wide, so it takes the row and the filters sit beside it. */}
+          <div className="flex items-center gap-2 mb-4 flex-wrap">
+            <div className="relative flex-1 min-w-[240px]">
+              <Search className="w-3.5 h-3.5 text-[var(--text-secondary)] absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by trial, sponsor, drug, or indication…"
-                className="w-full pl-9 pr-3 py-2 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[13px] focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                placeholder="Search trials, sponsors, drugs…"
+                className="w-full pl-10 pr-4 py-2 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-card-solid)] text-[12.5px] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)] transition-colors"
               />
             </div>
-            <div className="flex items-center gap-1 p-1 rounded-[10px] bg-[var(--skeleton-bg)]">
-              {(['all', 'active', 'closed'] as const).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setStatusFilter(s)}
-                  className={
-                    'px-3 py-1.5 rounded-[8px] text-[12px] font-medium capitalize transition-colors ' +
-                    (statusFilter === s
-                      ? 'bg-[var(--bg-card-solid)] text-[var(--text-primary)] shadow-sm'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]')
-                  }
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
+            {(['all', 'active', 'closed'] as const).map((s) => (
+              <PillButton
+                key={s}
+                active={statusFilter === s}
+                onClick={() => setStatusFilter(s)}
+                className="capitalize"
+              >
+                {s}
+              </PillButton>
+            ))}
+            {writable && (
+              <Button size="sm" onClick={() => setShowCreate(true)} className="rounded-full">
+                <Plus className="w-3.5 h-3.5" />
+                New Trial
+              </Button>
+            )}
           </div>
 
           {visibleTrials.length === 0 ? (
@@ -477,113 +401,21 @@ export default function TrialDashboard() {
               subtitle="Try a different search term or status filter."
             />
           ) : (
-          <Card size="sm" className="overflow-hidden">
-            <div className="overflow-x-auto custom-scrollbar">
-              <table className="w-full text-left border-collapse min-w-[640px]">
-              <thead>
-                <tr className="border-b border-[var(--border-subtle)] bg-[var(--skeleton-bg)]">
-                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Trial</th>
-                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Indication</th>
-                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Sites</th>
-                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] text-right">Patients</th>
-                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] text-right">Slides</th>
-                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] text-right">Confirmed</th>
-                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] w-[120px]">Progress</th>
-                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Status</th>
-                  <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleTrials.map((trial) => (
-                  <tr
-                    key={trial.id}
-                    className="border-b border-[var(--border-subtle)] last:border-0 hover:bg-[var(--skeleton-bg)] transition-colors cursor-pointer"
-                    onClick={() => router.push(`/dashboard/trials/${trial.id}`)}
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <p className="text-[13px] font-semibold">{trial.name}</p>
-                        {trial.phase && (
-                          <span className="text-[10px] font-medium text-[var(--text-secondary)] bg-[var(--skeleton-bg)] rounded-full px-2 py-0.5 whitespace-nowrap">
-                            {trial.phase}
-                          </span>
-                        )}
-                      </div>
-                      {/* The registry ID is the trial's real identifier, so it
-                          sits with the name rather than being captured and
-                          never shown. */}
-                      <p className="text-[11px] text-[var(--text-secondary)]">
-                        {trial.protocol_id ? `${trial.protocol_id} · ` : ''}{trial.sponsor} · {trial.drug}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3 text-[12px] text-[var(--text-secondary)]">{trial.indication}</td>
-                    <td className="px-4 py-3 text-[12px] text-[var(--text-secondary)]">
-                      {trial.sites && trial.sites.length > 0 ? `${trial.sites.length} site${trial.sites.length > 1 ? 's' : ''}` : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-[13px] font-medium text-right tabular-nums">{trial.patient_count}</td>
-                    <td className="px-4 py-3 text-[13px] font-medium text-right tabular-nums">{trial.slides_analyzed}</td>
-                    <td className="px-4 py-3 text-[13px] font-medium text-right tabular-nums" style={{ color: '#34C759' }}>{trial.slides_confirmed}</td>
-                    <td className="px-4 py-3">
-                      <div className="h-1.5 rounded-full bg-[var(--border-subtle)] overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-[#007AFF]"
-                          style={{ width: `${trial.slides_analyzed > 0 ? (trial.slides_confirmed / trial.slides_analyzed) * 100 : 0}%` }}
-                        />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5">
-                        <Pill accent={trial.status === 'active' ? 'green' : 'gray'}>{trial.status}</Pill>
-                        {!!openQueries[trial.id] && (
-                          <Pill accent="orange">{openQueries[trial.id]} {openQueries[trial.id] === 1 ? 'query' : 'queries'}</Pill>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          title="View Patients"
-                          className="p-1.5 rounded-[6px] hover:bg-[var(--border-medium)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-                          onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/trials/${trial.id}`); }}
-                        >
-                          <Users className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          title="Export Corrections"
-                          className="p-1.5 rounded-[6px] hover:bg-[var(--border-medium)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-                          onClick={(e) => { e.stopPropagation(); exportCorrections(trial.id, trial.name); }}
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                        </button>
-                        {writable && (
-                          <button
-                            title={trial.status === 'closed' ? 'Reopen Trial' : 'Close Trial'}
-                            className="p-1.5 rounded-[6px] hover:bg-[var(--border-medium)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setTrialStatus(trial.id, trial.name, trial.status === 'closed' ? 'active' : 'closed');
-                            }}
-                          >
-                            {trial.status === 'closed'
-                              ? <RotateCcw className="w-3.5 h-3.5" />
-                              : <Archive className="w-3.5 h-3.5" />}
-                          </button>
-                        )}
-                        {writable && <button
-                          title="Delete"
-                          className="p-1.5 rounded-[6px] hover:bg-[#FF3B30]/10 text-[var(--text-secondary)] hover:text-[#FF3B30] transition-colors"
-                          onClick={(e) => { e.stopPropagation(); deleteTrial(trial.id, trial.name); }}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-              </div>
-          </Card>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {visibleTrials.map((trial) => (
+              <TrialCard
+                key={trial.id}
+                trial={trial}
+                openQueries={openQueries[trial.id] || 0}
+                writable={writable}
+                onOpen={() => router.push(`/dashboard/trials/${trial.id}`)}
+                onExport={() => exportCorrections(trial.id, trial.name)}
+                onToggleStatus={() =>
+                  setTrialStatus(trial.id, trial.name, trial.status === 'closed' ? 'active' : 'closed')}
+                onDelete={() => deleteTrial(trial.id, trial.name)}
+              />
+            ))}
+          </div>
           )}
           </>
         )}
@@ -600,37 +432,172 @@ export default function TrialDashboard() {
 
 /** Top-bar section pill. Active is a solid fill so the current section is
  * unambiguous at a glance, matching how the rest of the app marks state. */
-function NavPill({ label, active, onClick }: { label: string; active?: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      aria-current={active ? 'page' : undefined}
-      className={
-        'px-3.5 py-1.5 rounded-full text-[12.5px] font-medium whitespace-nowrap transition-colors ' +
-        (active
-          ? 'bg-[#007AFF] text-white'
-          : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--skeleton-bg)]')
-      }
-    >
-      {label}
-    </button>
-  );
-}
 
 /** A single headline figure in the greeting strip. */
-function Metric({ label, value, accent }: { label: string; value: number; accent?: string }) {
+/** One figure, in a card. */
+export function StatCard({ icon: Icon, label, value, tone, sub }: {
+  icon: React.ElementType; label: string; value: number; tone?: string; sub?: string;
+}) {
+  // The badge carries the colour so the figure does not have to. A big number
+  // painted orange reads as an alarm even when it is only a count; the tint
+  // behind the icon distinguishes the cards without shouting.
+  const accent = tone || 'var(--accent)';
   return (
-    <div className="min-w-[92px]">
-      <p className="text-[11px] text-[var(--text-secondary)] whitespace-nowrap">{label}</p>
-      <p className="text-[24px] font-semibold tabular-nums leading-tight mt-0.5" style={{ color: accent }}>
-        {value.toLocaleString()}
-      </p>
-    </div>
+    <Card size="md" className="p-4 flex items-center gap-3.5">
+      <span
+        className="w-11 h-11 rounded-[14px] grid place-items-center shrink-0"
+        style={{ background: `color-mix(in srgb, ${accent} 12%, transparent)` }}
+      >
+        <Icon className="w-[18px] h-[18px]" style={{ color: accent }} />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-[12px] font-medium text-[var(--text-secondary)] truncate">{label}</span>
+        <span className="block text-[26px] font-semibold tabular-nums leading-tight">
+          {value.toLocaleString()}
+        </span>
+        {sub && (
+          <span className="block text-[11px] text-[var(--text-secondary)] truncate">{sub}</span>
+        )}
+      </span>
+    </Card>
   );
 }
 
-function Divider() {
-  return <div className="w-px self-stretch bg-[var(--border-subtle)]" aria-hidden="true" />;
+/** A trial, as a card.
+ *
+ * This was a nine-column table that needed horizontal scrolling below about
+ * 640px — so on a laptop the columns a coordinator actually checks (progress,
+ * status, open queries) were off the right edge. A card carries the same
+ * fields in a shape that fits, and puts the progress bar directly under the
+ * counts it describes instead of three columns away.
+ */
+export function TrialCard({ trial, openQueries, writable, onOpen, onExport, onToggleStatus, onDelete }: {
+  trial: Trial;
+  openQueries: number;
+  writable: boolean;
+  onOpen: () => void;
+  onExport: () => void;
+  onToggleStatus: () => void;
+  onDelete: () => void;
+}) {
+  const pct = trial.slides_analyzed > 0
+    ? Math.round((trial.slides_confirmed / trial.slides_analyzed) * 100)
+    : 0;
+  const pending = Math.max(0, trial.slides_analyzed - trial.slides_confirmed);
+
+  // A div, not a button: the card contains its own buttons, and nesting
+  // interactive elements is invalid and breaks keyboard navigation. Role and
+  // key handling give it the same behaviour without the nesting.
+  return (
+    <Card
+      size="sm"
+      className="health-card-interactive p-5 cursor-pointer flex flex-col focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); }
+      }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-[14px] font-semibold truncate">{trial.name}</h3>
+            {trial.phase && (
+              <span className="text-[10px] font-medium text-[var(--text-secondary)] bg-[var(--skeleton-bg)] rounded-full px-2 py-0.5 whitespace-nowrap">
+                {trial.phase}
+              </span>
+            )}
+          </div>
+          <p className="text-[11.5px] text-[var(--text-secondary)] mt-0.5 truncate">
+            {[trial.protocol_id, trial.sponsor, trial.drug].filter(Boolean).join(' · ')}
+          </p>
+        </div>
+        <Pill accent={trial.status === 'active' ? 'green' : 'gray'}>{trial.status}</Pill>
+      </div>
+
+      {trial.indication && (
+        <p className="text-[11.5px] text-[var(--text-secondary)] mt-2.5 truncate">{trial.indication}</p>
+      )}
+
+      <div className="grid grid-cols-3 gap-2 mt-4">
+        {[
+          ['Patients', trial.patient_count, undefined],
+          ['Analysed', trial.slides_analyzed, undefined],
+          ['Signed', trial.slides_confirmed, '#34C759'],
+        ].map(([label, value, tone]) => (
+          <div key={String(label)}>
+            <p className="text-[10px] uppercase tracking-[0.4px] text-[var(--text-secondary)]">{String(label)}</p>
+            <p className="text-[16px] font-semibold tabular-nums leading-tight mt-0.5"
+               style={{ color: tone as string | undefined }}>
+              {Number(value).toLocaleString()}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-3.5">
+        <div className="flex items-center justify-between text-[10.5px] text-[var(--text-secondary)] mb-1">
+          <span>{pending > 0 ? `${pending} awaiting review` : 'All signed'}</span>
+          <span className="tabular-nums">{pct}%</span>
+        </div>
+        <div className="h-1.5 rounded-full bg-[var(--border-subtle)] overflow-hidden">
+          <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${pct}%` }} />
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-2 mt-4 pt-3 border-t border-[var(--border-subtle)]">
+        <div className="flex items-center gap-1.5 min-w-0">
+          {openQueries > 0 && (
+            <Pill accent="orange">{openQueries} {openQueries === 1 ? 'query' : 'queries'}</Pill>
+          )}
+          {trial.sites?.length > 0 && (
+            <span className="text-[10.5px] text-[var(--text-secondary)] whitespace-nowrap">
+              {trial.sites.length} site{trial.sites.length > 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-0.5 shrink-0">
+          <CardAction icon={Download} title="Export corrections"
+                      onClick={(e) => { e.stopPropagation(); onExport(); }} />
+          {writable && (
+            <CardAction
+              icon={trial.status === 'closed' ? RotateCcw : Archive}
+              title={trial.status === 'closed' ? 'Reopen trial' : 'Close trial'}
+              onClick={(e) => { e.stopPropagation(); onToggleStatus(); }}
+            />
+          )}
+          {writable && (
+            <CardAction icon={Trash2} title="Delete trial" danger
+                        onClick={(e) => { e.stopPropagation(); onDelete(); }} />
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function CardAction({ icon: Icon, title, onClick, danger }: {
+  icon: React.ElementType;
+  title: string;
+  onClick: (e: React.MouseEvent) => void;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      title={title}
+      aria-label={title}
+      onClick={onClick}
+      className={cn(
+        'p-1.5 rounded-[7px] text-[var(--text-secondary)] transition-colors',
+        danger
+          ? 'hover:bg-[#FF3B30]/10 hover:text-[#FF3B30]'
+          : 'hover:bg-[var(--skeleton-bg)] hover:text-[var(--text-primary)]',
+      )}
+    >
+      <Icon className="w-3.5 h-3.5" />
+    </button>
+  );
 }
 
 function PortfolioRow({ label, value, accent }: { label: string; value: number; accent?: string }) {

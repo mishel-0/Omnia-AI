@@ -351,12 +351,30 @@ def delete_slide(patient_uuid: str, slide_id: str) -> Optional[dict]:
                         return removed
     return None
 
+# A trial can be suspended without being finished — by a data monitoring
+# committee, by the sponsor, or by a regulator — and that is a different state
+# from "closed" in every way that matters: enrolment stops but the trial is
+# still live, its data is still under retention, and it can resume. Collapsing
+# it into "closed" would have told a monitor the study had ended.
+TRIAL_STATUSES = ("active", "on_hold", "closed")
+
+
 def set_trial_status(trial_id: str, status: str) -> Optional[dict]:
-    """Close or reopen a trial. Closing marks enrollment/review complete."""
-    valid = ("active", "closed")
-    if status not in valid:
-        raise ValidationError(f"Status must be one of: {', '.join(valid)}")
-    return update_trial(trial_id, {"status": status})
+    """Move a trial between running, suspended and closed.
+
+    Closing stamps the end date, because the moment a trial closes is the only
+    moment the software can know it — asking someone to type it later produces
+    a date that is remembered rather than recorded. Reopening clears it again,
+    so a running trial never carries an end date it has not reached.
+    """
+    if status not in TRIAL_STATUSES:
+        raise ValidationError(f"Status must be one of: {', '.join(TRIAL_STATUSES)}")
+    updates = {"status": status}
+    if status == "closed":
+        updates["ended"] = datetime.datetime.now().isoformat()
+    else:
+        updates["ended"] = ""
+    return update_trial(trial_id, updates)
 
 def _refresh_trial_slide_stats(trial_id: str):
     if not get_trial(trial_id):
@@ -375,7 +393,9 @@ def _assert_readable_slide(path: str):
     trial/patient management must keep working on a machine where slide
     support isn't available.
     """
-    if os.environ.get("OMNIA_TEST_FAKE_GRADING") == "1":
+    from backend import testmode
+
+    if testmode.active():
         return  # test fixtures upload dummy bytes on purpose; see grading_model.predict
     try:
         import openslide

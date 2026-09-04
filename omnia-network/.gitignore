@@ -1,0 +1,14 @@
+# Received site contributions and published releases are runtime state, not
+# source — and contributions may include weights derived from real clinical
+# corrections once this is live. Never committed, regardless of edition.
+pending/*
+!pending/.gitkeep
+releases/*
+!releases/.gitkeep
+
+# Site registry — names and issuance dates of real clinical sites.
+sites.json
+
+__pycache__/
+*.pyc
+.venv/

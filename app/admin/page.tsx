@@ -5,7 +5,7 @@ import {
   Activity, ShieldCheck, RefreshCw,
   CheckCircle, XCircle, AlertTriangle, FlaskConical, Users, FileCheck,
 } from 'lucide-react';
-import { API_BASE } from '@/lib/constants';
+import { apiBase } from '@/lib/constants';
 import { Card, Button } from '@/components/ui';
 
 interface HealthResponse {
@@ -52,9 +52,9 @@ export default function AdminPage() {
     setError(null);
     try {
       const [h, l, t] = await Promise.all([
-        fetch(`${API_BASE}/health`).then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch(`${API_BASE}/api/license/status`).then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch(`${API_BASE}/api/trials/`).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch(`${apiBase()}/health`).then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch(`${apiBase()}/api/license/status`).then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch(`${apiBase()}/api/trials/`).then(r => r.ok ? r.json() : []).catch(() => []),
       ]);
       setHealth(h);
       setLicense(l);
@@ -72,7 +72,7 @@ export default function AdminPage() {
     return (
       <div className="min-h-screen bg-[var(--bg-primary)] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 rounded-full border-2 border-[#007AFF]/20 border-t-[#007AFF] animate-spin" />
+          <div className="w-8 h-8 rounded-full border-2 border-[var(--accent-border)] border-t-[var(--accent)] animate-spin" />
           <p className="text-[12px] text-[var(--text-secondary)]">Loading system status…</p>
         </div>
       </div>
@@ -114,7 +114,7 @@ export default function AdminPage() {
             {health ? <CheckCircle className="w-5 h-5 text-[#34C759]" /> : <XCircle className="w-5 h-5 text-[#FF3B30]" />}
             <div className="flex-1">
               <p className="text-[13px] font-bold">{health ? 'All Systems Operational' : 'Backend Unreachable'}</p>
-              <p className="text-[10px] text-[var(--text-secondary)]">{API_BASE}</p>
+              <p className="text-[10px] text-[var(--text-secondary)]">{apiBase()}</p>
             </div>
           </div>
         </Card>

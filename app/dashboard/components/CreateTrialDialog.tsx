@@ -238,7 +238,7 @@ export default function CreateTrialDialog({
                 <select
                   id="trial-phase" value={draft.phase}
                   onChange={e => set('phase', e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-[13px] focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                  className="w-full px-3 py-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-[13px] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
                 >
                   <option value="">Not stated</option>
                   {PHASES.map(p => <option key={p} value={p}>{p}</option>)}
@@ -298,7 +298,7 @@ export default function CreateTrialDialog({
             aside={
               <button
                 onClick={addSite}
-                className="inline-flex items-center gap-1 text-[12px] font-medium text-[#007AFF] hover:underline"
+                className="inline-flex items-center gap-1 text-[12px] font-medium text-[var(--accent)] hover:underline"
               >
                 <Plus className="w-3.5 h-3.5" /> Add site
               </button>
@@ -334,7 +334,7 @@ export default function CreateTrialDialog({
               <textarea
                 id="trial-notes" value={draft.notes}
                 onChange={e => set('notes', e.target.value)}
-                className="w-full px-3 py-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-[13px] resize-none h-20 focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                className="w-full px-3 py-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-[13px] resize-none h-20 focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
               />
             </Field>
           </Section>
@@ -419,7 +419,7 @@ const Input = React.forwardRef<HTMLInputElement, {
         'w-full px-3 py-2.5 rounded-[10px] border bg-[var(--bg-primary)] text-[var(--text-primary)] text-[13px] focus:outline-none focus:ring-2 transition-colors ' +
         (invalid
           ? 'border-[#FF3B30] focus:ring-[#FF3B30]'
-          : 'border-[var(--border-medium)] focus:ring-[#007AFF]')
+          : 'border-[var(--border-medium)] focus:ring-[var(--accent)]')
       }
       {...rest}
     />

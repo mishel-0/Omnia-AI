@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
-  ArrowLeft, Plus, Upload, Check, Download, FileText, Lock,
-  MessageSquareWarning, ChevronDown, ChevronUp, X, Sparkles, FlaskConical, Trash2,
+  Plus, Upload, Check, Download, FileText, Lock,
+  MessageSquareWarning, ChevronDown, ChevronUp, X, Sparkles, FlaskConical, Trash2, ChevronRight,
 } from 'lucide-react';
 import { Card, Button, Pill, EmptyState, TableSkeleton } from '@/components/ui';
 import { apiFetch, apiSend, useAuth, canWrite } from '@/lib/auth';
@@ -14,6 +14,7 @@ import { InfoHint, TrustDisclosure } from '@/lib/onboarding';
 import { SubjectTimeline } from './SubjectTimeline';
 import { CohortInsights } from './CohortInsights';
 import { DrugProfile } from './DrugProfile';
+import BatchPanel from './BatchPanel';
 
 interface Biomarker { result: string; interpretation: string; }
 /** One sampled tile and how strongly the model's attention layer weighted it
@@ -113,35 +114,41 @@ function formatBytes(bytes: number): string {
   return `${bytes} B`;
 }
 
-/** Stages surfaced while a slide is being analysed. Naming the actual work makes
- * the wait legible to a pathologist instead of an unexplained spinner. */
-const ANALYSIS_STAGES = [
-  'Reading whole-slide image',
-  'Segmenting tissue regions',
-  'Detecting glandular architecture',
-  'Grading Gleason patterns',
-  'Assessing biomarkers',
-  'Compiling report',
-];
-const STAGE_MS = 600;
+/** Progress shown while a slide is being analysed.
+ *
+ * This was a six-step caption list ("Segmenting tissue regions", "Assessing
+ * biomarkers", …) advanced by a 600 ms timer, with a percentage derived from
+ * the timer's index and an artificial delay holding the result back so the
+ * captions had time to play. Two things were wrong with it. The percentage
+ * measured nothing — it was an animation wearing the costume of progress.
+ * And the captions described work the model does not do: grading is
+ * attention-MIL over sampled tiles, with no segmentation stage and no
+ * biomarker assessment to narrate.
+ *
+ * The backend does not stream per-stage progress, so the honest thing to
+ * show is that it is working and how long it has been. Elapsed time is a real
+ * number, and an indeterminate bar claims nothing it cannot support.
+ */
+function AnalyzingRow({ startedAt }: { startedAt: number }) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 500);
+    return () => clearInterval(id);
+  }, [startedAt]);
 
-/** Animated "thinking" row shown in place of the result while analysis runs. */
-function AnalyzingRow({ stage }: { stage: number }) {
-  const pct = Math.round(((stage + 1) / ANALYSIS_STAGES.length) * 100);
   return (
     <div className="max-w-[380px]">
       <div className="flex items-center gap-2">
-        <Sparkles className="w-3.5 h-3.5 text-[#007AFF] animate-pulse shrink-0" />
-        <span key={stage} className="text-[12px] text-[#007AFF] animate-[stage-in_0.35s_ease-out]">
-          {ANALYSIS_STAGES[Math.min(stage, ANALYSIS_STAGES.length - 1)]}
-          <span className="analysis-dots" />
+        <Sparkles className="w-3.5 h-3.5 text-[var(--accent)] animate-pulse shrink-0" />
+        <span className="text-[12px] text-[var(--accent)]">
+          Analysing slide<span className="analysis-dots" />
+        </span>
+        <span className="text-[11px] text-[var(--text-secondary)] tabular-nums ml-auto">
+          {elapsed}s
         </span>
       </div>
       <div className="mt-2 h-[3px] rounded-full bg-[var(--border-subtle)] overflow-hidden">
-        <div
-          className="h-full rounded-full bg-[#007AFF] transition-all duration-500 ease-out"
-          style={{ width: `${pct}%` }}
-        />
+        <div className="h-full w-1/3 rounded-full bg-[var(--accent)] animate-indeterminate" />
       </div>
       <div className="mt-2 space-y-1.5">
         <div className="h-2 rounded-[3px] skeleton-shimmer w-[85%]" />
@@ -485,21 +492,14 @@ export default function TrialDetail() {
 
   const runAnalysis = async (patientId: string, slideId: string, filename: string) => {
     setAnalyzingIds((prev) => ({ ...prev, [slideId]: true }));
-    setAnalysisStage((prev) => ({ ...prev, [slideId]: 0 }));
+    // Records when this analysis actually started, so the row can show real
+    // elapsed time. There is no longer an artificial minimum delay: the
+    // previous version held a finished result back for
+    // STAGE_MS × stages so a caption animation could play out, which made
+    // every analysis slower than it needed to be for the sake of the
+    // animation.
+    setAnalysisStage((prev) => ({ ...prev, [slideId]: Date.now() }));
 
-    // Step the visible stage text so the wait reads as real work being done,
-    // rather than an opaque spinner.
-    const stageTimer = setInterval(() => {
-      setAnalysisStage((prev) => {
-        const at = prev[slideId] ?? 0;
-        if (at >= ANALYSIS_STAGES.length - 1) return prev;
-        return { ...prev, [slideId]: at + 1 };
-      });
-    }, STAGE_MS);
-
-    const minDelay = new Promise((resolve) =>
-      setTimeout(resolve, STAGE_MS * ANALYSIS_STAGES.length),
-    );
     try {
       // A 503 means the machine is saturated, not that the slide is bad —
       // the backend sends Retry-After for exactly this. Previously nothing
@@ -508,10 +508,10 @@ export default function TrialDetail() {
       const MAX_BUSY_RETRIES = 3;
       let res: Response | null = null;
       for (let attempt = 0; attempt <= MAX_BUSY_RETRIES; attempt++) {
-        const [r] = await Promise.all([
-          apiFetch(`/api/trials/patients/${patientId}/slides/${slideId}/analyze`, { method: 'POST' }),
-          attempt === 0 ? minDelay : Promise.resolve(),
-        ]);
+        const r = await apiFetch(
+          `/api/trials/patients/${patientId}/slides/${slideId}/analyze`,
+          { method: 'POST' },
+        );
         if (r.status !== 503 || attempt === MAX_BUSY_RETRIES) { res = r; break; }
         const retryAfter = Number(r.headers.get('Retry-After')) || 30;
         toast.show(
@@ -545,7 +545,6 @@ export default function TrialDetail() {
       console.error('Failed to analyze slide', e);
       toast.show(e instanceof Error ? e.message : `AI analysis failed for ${filename}`, 'error');
     } finally {
-      clearInterval(stageTimer);
       setAnalyzingIds((prev) => {
         const next = { ...prev };
         delete next[slideId];
@@ -758,7 +757,7 @@ export default function TrialDetail() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
+      <div className="">
         <div className="border-b border-[var(--border-subtle)] px-6 py-3 bg-[var(--bg-card-solid)]">
           <div className="w-24 h-2.5 rounded-[4px] skeleton-shimmer mb-2.5" />
           <div className="w-48 h-3.5 rounded-[4px] skeleton-shimmer mb-1.5" />
@@ -782,12 +781,27 @@ export default function TrialDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)] theme-transition">
+    <div className="">
       {/* Header */}
-      <div className="titlebar-inset border-b border-[var(--border-subtle)] pr-6 py-3 bg-[var(--bg-card-solid)]">
-        <button onClick={() => router.push('/dashboard')} className="flex items-center gap-1 text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] mb-1.5 transition-colors">
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to Trials
+      <div className="max-w-[1200px] px-7 pt-6">
+      {/* Breadcrumb rather than a back button in a strip of its own. The strip
+          was left over from before there was a shell to come back to: it
+          carried an 84px inset meant to clear window buttons that are now two
+          hundred pixels away, and a second horizontal rule under a header that
+          already draws one. */}
+      <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[12.5px] mb-4">
+        <button onClick={() => router.push('/dashboard')}
+                className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
+          Dashboard
         </button>
+        <ChevronRight className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+        <button onClick={() => router.push('/dashboard/trials')}
+                className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
+          Trials
+        </button>
+        <ChevronRight className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+        <span className="font-medium text-[var(--accent)] truncate max-w-[280px]" aria-current="page">{trial.name}</span>
+      </nav>
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-[16px] font-semibold">{trial.name}</h1>
@@ -821,6 +835,13 @@ export default function TrialDetail() {
       {/* Patient List */}
       <div className="max-w-5xl mx-auto px-6 py-6">
         <DrugProfile trialId={trialId} writable={writable} />
+        {/* Only where there is something to analyse and someone allowed to
+            start it — a monitor or sponsor cannot queue work. */}
+        {patients.length > 0 && writable && (
+          <div className="mb-5">
+            <BatchPanel trialId={trialId} onFinished={loadData} />
+          </div>
+        )}
         {patients.length > 0 && <CohortInsights trialId={trialId} />}
         {patients.length === 0 ? (
           <EmptyState icon={FileText} title="No patients yet" subtitle={writable ? 'Add your first patient to begin.' : 'No patients have been added yet.'} />
@@ -870,7 +891,7 @@ export default function TrialDetail() {
                       <MessageSquareWarning className="w-3 h-3" /> Flag Query
                     </button>
                     {writable && (
-                      <label className="cursor-pointer inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] text-[11px] font-semibold bg-[#007AFF]/10 text-[#007AFF] hover:bg-[#007AFF]/15 transition-colors">
+                      <label className="cursor-pointer inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] text-[11px] font-semibold bg-[var(--accent-soft)] text-[var(--accent)] hover:bg-[var(--accent-soft)] transition-colors">
                         <Upload className="w-3 h-3" />
                         Upload .svs
                         <input type="file" accept=".svs" multiple className="hidden" onChange={(e) => e.target.files && handleDrop(patient.id, e.target.files)} />
@@ -957,7 +978,7 @@ export default function TrialDetail() {
                           <td className="px-3 py-2 text-[12px] text-[var(--text-secondary)]">
                             <span className="inline-flex items-center gap-1.5">
                               {analyzing ? (
-                                <AnalyzingRow stage={analysisStage[slide.id] ?? 0} />
+                                <AnalyzingRow startedAt={analysisStage[slide.id] ?? Date.now()} />
                               ) : slide.confirmed ? (
                                 `Confirmed: ${slide.doctor_correction || slide.grade || 'N/A'}`
                               ) : slide.grade ? (
@@ -982,7 +1003,7 @@ export default function TrialDetail() {
                               {hasAI && (
                                 <button
                                   title={isExpanded ? 'Hide the full AI pathology report' : 'View the full AI pathology report'}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] text-[11px] font-semibold bg-[#007AFF]/10 text-[#007AFF] hover:bg-[#007AFF]/15 transition-colors whitespace-nowrap"
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] text-[11px] font-semibold bg-[var(--accent-soft)] text-[var(--accent)] hover:bg-[var(--accent-soft)] transition-colors whitespace-nowrap"
                                   onClick={() => setExpandedSlides({ ...expandedSlides, [slide.id]: !isExpanded })}
                                 >
                                   <Sparkles className="w-3 h-3" />
@@ -1085,7 +1106,7 @@ export default function TrialDetail() {
                                   <p className="text-[9px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] mb-1">Confidence</p>
                                   <div className="flex items-center gap-2">
                                     <div className="h-1.5 flex-1 rounded-full bg-[var(--border-subtle)] overflow-hidden max-w-[80px]">
-                                      <div className="h-full rounded-full bg-[#007AFF]" style={{ width: `${(slide.confidence || 0) * 100}%` }} />
+                                      <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${(slide.confidence || 0) * 100}%` }} />
                                     </div>
                                     <span className="text-[12px] font-medium tabular-nums">{((slide.confidence || 0) * 100).toFixed(0)}%</span>
                                   </div>
@@ -1302,7 +1323,7 @@ export default function TrialDetail() {
                     setEsign({ mode: 'correct', patientId: correcting.patientId, slideId: correcting.slideId, correction: g.text });
                     setEsignPassword(''); setEsignError(''); setCorrecting(null);
                   }}
-                  className="w-full text-left px-3.5 py-2.5 rounded-[10px] border border-[var(--border-medium)] hover:border-[#007AFF] hover:bg-[#007AFF]/[0.04] transition-colors"
+                  className="w-full text-left px-3.5 py-2.5 rounded-[10px] border border-[var(--border-medium)] hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] transition-colors"
                 >
                   <p className="text-[13px] font-semibold">{g.text}</p>
                   <p className="text-[11px] text-[var(--text-secondary)]">{g.meaning}</p>

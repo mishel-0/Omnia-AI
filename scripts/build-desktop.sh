@@ -122,11 +122,38 @@ run_step pyinstaller pyinstaller \
 
 deactivate
 
-if [ ! -f "dist/omnia-backend" ] && [ ! -f "dist/omnia-backend.exe" ]; then
-    echo "  ❌ Backend build failed!"
+# onedir: dist/omnia-backend is a directory holding the executable and its
+# libraries, so check for the executable inside it rather than for a file at
+# that path — the old test passed for a onefile build and silently failed for
+# this one.
+if [ ! -x "dist/omnia-backend/omnia-backend" ] && [ ! -f "dist/omnia-backend/omnia-backend.exe" ]; then
+    echo "  ❌ Backend build failed — no executable in dist/omnia-backend/"
+    ls -la dist/omnia-backend 2>/dev/null | head || true
     exit 1
 fi
-echo "  ✅ Backend built → dist/omnia-backend"
+echo "  ✅ Backend built → dist/omnia-backend/ ($(du -sh dist/omnia-backend | cut -f1))"
+
+# PyInstaller does not cross-compile — it freezes for the machine it runs on.
+# Building the Windows package here would therefore wrap a macOS Mach-O binary
+# in a Windows installer, which installs cleanly and then cannot start its
+# backend. The old script did exactly that and exited 0, because the output
+# verification below only ever covered macOS.
+if [ "$PLATFORM" = "win" ] || [ "$PLATFORM" = "all" ]; then
+    if [ ! -f "dist/omnia-backend/omnia-backend.exe" ]; then
+        echo ""
+        echo "  ❌ Cannot build the Windows package on $(uname -s)."
+        echo ""
+        echo "     PyInstaller freezes for the host platform, so the backend just"
+        echo "     built is a $(uname -m) $(uname -s) executable. Packaging it for"
+        echo "     Windows produces an installer whose backend cannot run."
+        echo ""
+        echo "     Build it on Windows, or let CI do it: the build-windows job in"
+        echo "     .github/workflows/release.yml runs on a windows-latest runner,"
+        echo "     smoke-tests the bundled backend and grades a real slide before"
+        echo "     the installer is published."
+        exit 1
+    fi
+fi
 
 # ── 3. Clean old builds ──
 echo ""
@@ -138,12 +165,29 @@ echo "  ✅ Clean"
 echo ""
 echo "[4/4] Packaging Electron app..."
 
+# A signing certificate that is defined-but-empty is worse than one that is
+# absent. GitHub Actions substitutes an empty string for a secret that does not
+# exist, so `CSC_LINK: ${{ secrets.MAC_CERT_P12 }}` arrives as CSC_LINK="" —
+# which electron-builder reads as "a certificate path was supplied", tries to
+# resolve, and fails with "<project dir> not a file". Locally the variable is
+# unset entirely, which is why this only ever broke in CI.
+#
+# Unset the empty ones so an unsigned build is treated as an unsigned build.
+NOTARIZE_FLAG=""
+if [ -z "${CSC_LINK:-}" ]; then
+    unset CSC_LINK CSC_KEY_PASSWORD 2>/dev/null || true
+    # Nothing to notarize without a certificate, and asking would fail late.
+    NOTARIZE_FLAG="--config.mac.notarize=false"
+    export CSC_IDENTITY_AUTO_DISCOVERY=false
+    echo "  ℹ️  No signing certificate — building unsigned."
+fi
+
 if [ "$PLATFORM" = "mac" ]; then
-    run_step electron-builder-mac npx electron-builder --mac --publish never --config.extraMetadata.main=desktop/main.js
+    run_step electron-builder-mac npx electron-builder --mac --publish never $NOTARIZE_FLAG --config.extraMetadata.main=desktop/main.js
 elif [ "$PLATFORM" = "win" ]; then
     run_step electron-builder-win npx electron-builder --win --publish never --config.extraMetadata.main=desktop/main.js
 elif [ "$PLATFORM" = "all" ]; then
-    run_step electron-builder-all npx electron-builder --mac --win --publish never --config.extraMetadata.main=desktop/main.js
+    run_step electron-builder-all npx electron-builder --mac --win --publish never $NOTARIZE_FLAG --config.extraMetadata.main=desktop/main.js
 fi
 
 # Keep the build output out of Spotlight. Without this, the freshly built
@@ -170,8 +214,20 @@ if [ "$PLATFORM" = "mac" ] || [ "$PLATFORM" = "all" ]; then
     # The Next.js frontend ships to Contents/Resources/frontend, NOT app.asar.
     # Checking the asar gives a false negative — verify the real location.
     require_nonempty_dir "$APP_PATH/Contents/Resources/frontend"
-    require_file "$APP_PATH/Contents/Resources/backend"
+    require_nonempty_dir "$APP_PATH/Contents/Resources/backend"
+    require_file "$APP_PATH/Contents/Resources/backend/omnia-backend"
     echo "  ✅ macOS app verified (frontend + bundled backend present)"
+fi
+
+if [ "$PLATFORM" = "win" ] || [ "$PLATFORM" = "all" ]; then
+    # The Windows half of the same check. Its absence is why a broken Windows
+    # package could be produced with a zero exit code.
+    WIN_DIR="dist-desktop/win-unpacked"
+    require_nonempty_dir "$WIN_DIR"
+    require_nonempty_dir "$WIN_DIR/resources/frontend"
+    require_nonempty_dir "$WIN_DIR/resources/backend"
+    require_file "$WIN_DIR/resources/backend/omnia-backend.exe"
+    echo "  ✅ Windows app verified (frontend + bundled backend present)"
 fi
 
 echo ""

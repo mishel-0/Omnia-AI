@@ -96,7 +96,7 @@ export default function SystemHealth() {
             <button
               onClick={() => setExpanded(v => !v)}
               aria-expanded={expanded}
-              className="mt-2 inline-flex items-center gap-1 text-[11.5px] font-medium text-[#007AFF] hover:underline"
+              className="mt-2 inline-flex items-center gap-1 text-[11.5px] font-medium text-[var(--accent)] hover:underline"
             >
               {expanded ? 'Hide details' : 'Show details'}
               <ChevronDown className={'w-3 h-3 transition-transform ' + (expanded ? 'rotate-180' : '')} />
@@ -122,7 +122,7 @@ export default function SystemHealth() {
                       <button
                         onClick={() => runNow(w.name)}
                         disabled={busy}
-                        className="shrink-0 inline-flex items-center gap-1.5 text-[11.5px] font-medium text-[#007AFF] hover:underline disabled:opacity-50"
+                        className="shrink-0 inline-flex items-center gap-1.5 text-[11.5px] font-medium text-[var(--accent)] hover:underline disabled:opacity-50"
                       >
                         <RefreshCw className={'w-3 h-3 ' + (busy ? 'animate-spin' : '')} /> Run now
                       </button>

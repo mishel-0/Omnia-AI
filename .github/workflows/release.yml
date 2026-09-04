@@ -33,11 +33,41 @@ jobs:
       # It gates on the pre-release test suite, builds the Next.js standalone
       # frontend, bundles the backend with PyInstaller, then packages the app —
       # so CI can never drift from what's actually been verified on a machine.
+      # Signing and notarization run only when the secrets are present, so a
+      # fork or a pre-certificate build still produces a working (unsigned)
+      # artifact instead of failing. electron-builder skips both silently when
+      # the credentials are absent.
       - name: Build & package (mac)
         run: bash scripts/build-desktop.sh mac
         env:
           NEXT_TELEMETRY_DISABLED: 1
           USE_HARD_LINKS: false
+          # Developer ID Application cert, base64-encoded .p12
+          CSC_LINK: ${{ secrets.MAC_CERT_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          # Notarization via notarytool
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      # A signed-but-broken app is worse than an unsigned one: it only fails on
+      # the customer's machine. Verify the signature and the Gatekeeper verdict
+      # here, where a failure is cheap.
+      - name: Verify signature and notarization
+        run: |
+          APP="dist-desktop/mac-arm64/Omnia Pathology AI.app"
+          [ -d "$APP" ] || APP="dist-desktop/mac/Omnia Pathology AI.app"
+          echo "── codesign ──"
+          codesign -dv --verbose=2 "$APP" 2>&1 | grep -E "Authority|TeamIdentifier|Signature" || true
+          if codesign -dv "$APP" 2>&1 | grep -q "Signature=adhoc"; then
+            echo "  UNSIGNED build (no certificate configured)."
+            echo "  Gatekeeper will block this on a user machine — fine for CI, not for release."
+            exit 0
+          fi
+          echo "── Gatekeeper ──"
+          spctl -a -vvv -t install "$APP" 2>&1 | tee /tmp/spctl.txt
+          grep -q "accepted" /tmp/spctl.txt || { echo "  Gatekeeper REJECTED the app"; exit 1; }
+          echo "  signed and accepted by Gatekeeper"
 
       # Attach straight to the GitHub Release rather than an Actions artifact.
       # Release assets live in separate storage from Actions artifacts, so a
@@ -51,19 +81,23 @@ jobs:
           pip install -q tifffile
           python3 tests/smoke_inference.py
 
-      - name: Publish DMG to release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+      # Handed to the `publish` job rather than released from here. Two jobs
+      # both creating the same release is a race: whichever arrived second
+      # found it already existing, which surfaced intermittently as a failed
+      # publish on an otherwise green build. Worse, publishing per-platform
+      # meant a Windows failure still left the macOS installer released on its
+      # own — a tagged version that shipped half its artifacts.
+      #
+      # retention-days: 1 keeps this out of the artifact storage quota that
+      # broke earlier releases; the files only need to survive long enough for
+      # the publish job to collect them.
+      - name: Hand the DMG to the publish job
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ github.ref_name }}
-          name: Omnia Pathology AI ${{ github.ref_name }}
-          body: See commit log for changes.
-          files: dist-desktop/*.dmg
-          fail_on_unmatched_files: true
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: installer-macos
+          path: dist-desktop/*.dmg
+          if-no-files-found: error
+          retention-days: 1
 
   build-windows:
     runs-on: windows-latest
@@ -93,6 +127,24 @@ jobs:
         env:
           NEXT_TELEMETRY_DISABLED: 1
           USE_HARD_LINKS: false
+          # Authenticode cert, base64-encoded .pfx. Absent -> unsigned build.
+          CSC_LINK: ${{ secrets.WIN_CERT_PFX }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
+
+      - name: Verify Windows signature
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path dist-desktop -Filter "*.exe" | Select-Object -First 1
+          $sig = Get-AuthenticodeSignature $exe.FullName
+          Write-Host "  status : $($sig.Status)"
+          Write-Host "  signer : $($sig.SignerCertificate.Subject)"
+          if ($sig.Status -eq "NotSigned") {
+            Write-Host "  UNSIGNED build (no certificate configured)."
+            Write-Host "  SmartScreen will warn on a user machine."
+            exit 0
+          }
+          if ($sig.Status -ne "Valid") { throw "Signature is $($sig.Status), not Valid" }
+          Write-Host "  signature valid"
 
       # A PE-header check only proves the file is a Windows binary. It passed
       # happily for builds whose backend could not load OpenSlide and so could
@@ -101,8 +153,11 @@ jobs:
       - name: Smoke test the bundled backend
         shell: pwsh
         run: |
-          $exe = Get-ChildItem -Path dist -Filter "omnia-backend*.exe" | Select-Object -First 1
-          if (-not $exe) { throw "No backend executable found in dist/" }
+          # onedir: the executable lives inside dist/omnia-backend/ alongside
+          # its libraries, not at dist/omnia-backend.exe. A non-recursive
+          # Get-ChildItem on dist/ silently found nothing after that change.
+          $exe = Get-ChildItem -Path dist/omnia-backend -Filter "omnia-backend.exe" | Select-Object -First 1
+          if (-not $exe) { throw "No backend executable found in dist/omnia-backend/" }
           Write-Host "Starting $($exe.Name) ($([math]::Round($exe.Length / 1MB, 0)) MB)..."
 
           $env:OMNIA_DATA_DIR = "$env:RUNNER_TEMP\omnia-smoke"
@@ -110,7 +165,8 @@ jobs:
           $proc = Start-Process -FilePath $exe.FullName -PassThru -NoNewWindow
 
           try {
-            # First start unpacks the onefile bundle, which is slow on CI.
+            # The bundle ships unpacked now, so this is import time rather
+            # than decompression — but a cold CI runner is still slow.
             $ready = $false
             foreach ($i in 1..180) {
               Start-Sleep -Seconds 1
@@ -162,14 +218,40 @@ jobs:
           if ($header[0] -ne 0x4D -or $header[1] -ne 0x5A) { throw "Invalid PE header" }
           Write-Host "Installer: $($exe.Name) - $([math]::Round($exe.Length / 1MB, 0)) MB"
 
-      - name: Publish EXE to release
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Hand the installer to the publish job
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-windows
+          path: dist-desktop/*.exe
+          if-no-files-found: error
+          retention-days: 1
+
+  # One job, after both platforms have built and passed their smoke tests, so
+  # a release either contains both installers or is never created at all.
+  publish:
+    needs: [build-macos, build-windows]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: installers
+          merge-multiple: true
+
+      - name: Show what will be released
+        run: ls -lh installers/
+
+      - name: Publish both installers
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: Omnia Pathology AI ${{ github.ref_name }}
           body: See commit log for changes.
-          files: dist-desktop/*.exe
+          files: |
+            installers/*.dmg
+            installers/*.exe
           fail_on_unmatched_files: true
           draft: false
           prerelease: false

@@ -1,19 +1,21 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { BackendConnection } from '@/app/dashboard/components/BackendConnection';
+import Shell from './components/Shell';
 import AppErrorBoundary from '@/app/dashboard/components/AppErrorBoundary';
 import { useAuth } from '@/lib/auth';
 import { OnboardingProvider } from '@/lib/onboarding';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { apiBase } from '@/lib/constants';
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const [licenseChecking, setLicenseChecking] = useState(true);
   const [licenseValid, setLicenseValid] = useState(false);
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
+  const pathname = usePathname();
 
   useEffect(() => {
     const setupDone = (() => {
@@ -24,7 +26,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    fetch(`${API_BASE}/api/license/status`)
+    fetch(`${apiBase()}/api/license/status`)
       .then(r => r.json())
       .then(data => {
         if (!data.valid) {
@@ -53,7 +55,23 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <OnboardingProvider>{children}</OnboardingProvider>;
+  // The rail and the header sit inside the providers but outside {children},
+  // so they are mounted once for the whole dashboard segment and survive every
+  // navigation — only the page below them swaps.
+  return (
+    <OnboardingProvider>
+      {/* The window's own ground shows through as a margin around both panels.
+          That margin is what the frosted surfaces pick up — glass over an
+          opaque fill of the same colour is just a lighter opaque fill. */}
+      <Shell>
+        {/* Keyed on the path so React treats each section as a new element and
+            restarts the animation. */}
+        <div key={pathname} className="page-in flex-1 min-w-0">
+          {children}
+        </div>
+      </Shell>
+    </OnboardingProvider>
+  );
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

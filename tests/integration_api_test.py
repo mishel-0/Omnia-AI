@@ -525,7 +525,15 @@ check("Q1 API version matches package.json",
       s == 200 and _h.get("version") == _pkg_version,
       f"api={_h.get('version') if s == 200 else s} package.json={_pkg_version}")
 
-s, _pf = req("GET", "/api/system/preflight")
+# Preflight is open only during setup, before the first account exists. By
+# this point the suite has created users, so it needs a session — and the
+# fact that it does is itself worth asserting: the reply carries absolute
+# filesystem paths and a per-dependency map of the machine.
+s, _ = req("GET", "/api/system/preflight")
+check("Q1b preflight is not readable anonymously once setup is complete",
+      s == 401, f"expected 401 for an unauthenticated caller, got {s}")
+
+s, _pf = req("GET", "/api/system/preflight", token=ADMIN)
 check("Q2 preflight runs real environment checks",
       s == 200 and len(_pf.get("checks", [])) >= 5, f"got {s}")
 check("Q3 preflight reports readiness", s == 200 and "ready" in _pf, f"got {s}")
@@ -701,9 +709,42 @@ check("T7 agreement metric is defined for degenerate input",
       "QWK crashes or misreports on degenerate input")
 
 # A fine-tune must never be promoted unless it beat the current model.
-check("T8 promotion is gated on measured improvement",
-      "improved = best[\"qwk\"] > base_qwk" in open(_ft.__file__).read(),
-      "promotion is no longer gated on a held-out comparison")
+#
+# This used to grep finetune.py for the literal line `improved = best["qwk"]
+# > base_qwk`. That passes for any file containing the right characters and
+# fails for any correct refactor — including the one that fixed the gate's
+# real defect, where the epoch was chosen on the same slides that then judged
+# it. Assert the behaviour instead: labels with no learnable signal cannot
+# produce a genuine improvement, so the run must be rejected.
+def _no_signal_run():
+    import numpy as np
+    from unittest.mock import patch
+    rng = np.random.RandomState(7)
+    labels = [int(rng.randint(0, 6)) for _ in range(30)]
+    feats = {f"/noise/{i}.svs": rng.randn(32, 1280).astype(np.float32) for i in range(30)}
+    examples = [{"filepath": f"/noise/{i}.svs", "grade_group": g} for i, g in enumerate(labels)]
+    with patch.object(_ft, "extract_features", side_effect=lambda p, force=False: feats[p]):
+        return _ft.run_finetune(examples, epochs=3)
+
+try:
+    _r8 = _no_signal_run()
+    check("T8 promotion is gated on measured improvement",
+          (_r8["finetuned_qwk"] > _r8["baseline_qwk"]) == _r8["improved"]
+          and _r8["promoted"] == _r8["improved"],
+          f"promotion did not follow the measured comparison: {_r8.get('baseline_qwk')} -> "
+          f"{_r8.get('finetuned_qwk')}, improved={_r8.get('improved')}, "
+          f"promoted={_r8.get('promoted')}")
+
+    # The number the gate reports must come from slides that took no part in
+    # choosing which epoch to keep — otherwise it is the maximum over epochs
+    # on its own measuring stick, which is biased upward and will promote noise.
+    check("T8b the promotion figure is measured on slides used for nothing else",
+          "selection_qwk" in _r8
+          and _r8["train_size"] + _r8["select_size"] + _r8["val_size"] == _r8["examples_used"],
+          "training, selection and held-out slides do not partition the dataset")
+except Exception as _e8:
+    check("T8 promotion is gated on measured improvement", False, f"run failed: {_e8}")
+    check("T8b the promotion figure is measured on slides used for nothing else", False, "not reached")
 
 # Corrections are training labels; free text cannot be one.
 from backend.trials import grade_group_from_text as _g
@@ -722,6 +763,114 @@ s, _ = req("POST", "/api/training/start")
 check("T12 starting training requires auth", s == 401, f"expected 401, got {s}")
 s, _ = req("POST", "/api/training/model/revert", token=MONITOR)
 check("T13 a monitor cannot change the active model", s == 403, f"expected 403, got {s}")
+
+print("\n=== X. BATCH ANALYSIS QUEUE ===")
+
+from backend import batch as _bq
+
+s, _bj = req("GET", "/api/batch/jobs")
+check("X1 the batch queue is not readable anonymously", s == 401, f"expected 401, got {s}")
+s, _bj = req("GET", "/api/batch/jobs", token=ADMIN)
+check("X2 an authenticated caller can list batch jobs", s == 200 and isinstance(_bj, list), f"got {s}")
+
+s, _bj = req("POST", "/api/batch/trial", token=ADMIN, body={"trial_id": "does-not-exist"})
+check("X3 queueing a trial with nothing to analyse is a clean 409",
+      s == 409, f"expected 409, got {s}")
+
+# Progress must count every settled item. A bar that only advances on success
+# stalls forever on a cohort where some slides cannot be read.
+_j = _bq.enqueue([{"patient_uuid": "zz", "slide_id": f"z{i}"} for i in range(4)], trial_id="ZZ")
+_bq._settle(_j["id"], "zz", "z0", "done")
+_bq._settle(_j["id"], "zz", "z1", "failed", "unreadable")
+_after = _bq.get_job(_j["id"])
+check("X4 progress counts failures, not just successes",
+      _after["progress"] == 0.5, f"expected 0.5, got {_after['progress']}")
+
+# Cancelling a job whose work has all settled must close it. Left open, the
+# UI polls a job that can never change and keeps offering "Stop".
+_bq.cancel(_j["id"])
+_cancelled = _bq.get_job(_j["id"])
+check("X5 cancelling a fully-settled job closes it",
+      _cancelled["state"] == "finished" and _cancelled["finished_at"],
+      f"state={_cancelled['state']}, finished_at={_cancelled['finished_at']}")
+
+# But a job with a slide mid-analysis must stay open — the worker settles it.
+_j2 = _bq.enqueue([{"patient_uuid": "zz", "slide_id": "live"}], trial_id="ZZ2")
+_st = _bq._read()
+for _job in _st["jobs"]:
+    if _job["id"] == _j2["id"]:
+        _job["items"][0]["status"] = "running"
+_bq._write(_st)
+_bq.cancel(_j2["id"])
+check("X6 cancelling does not close a job with a slide still being analysed",
+      _bq.get_job(_j2["id"])["state"] != "finished",
+      "a job was closed while an analysis was still in flight")
+
+# Interrupted work is recoverable — the reason the queue is persisted at all.
+check("X7 a slide interrupted by a restart returns to pending",
+      _bq._recover_interrupted() >= 1,
+      "an interrupted slide was not returned to the queue")
+
+print("\n=== W. SIGNED REPORT CORRECTNESS ===")
+
+# The PDF is the document that leaves the building — it is what a sponsor, a
+# monitor or a regulator actually reads. Every check here is a defect that
+# shipped: each one rendered a signed clinical document that was wrong on its
+# face rather than failing loudly.
+import io as _io
+import re as _re
+import datetime as _dt
+from backend.pathology_report import generate_pathology_pdf as _pdf
+from backend.version import __version__ as _ver
+
+def _pdf_text(b):
+    from pypdf import PdfReader
+    return "\n".join(p.extract_text() for p in PdfReader(_io.BytesIO(b)).pages)
+
+# ISUP grade group 0 means benign. Testing it for truthiness treated it as
+# absent, so a benign slide printed "Grade Group: —" beside "Gleason: Benign".
+_benign = _pdf_text(_pdf(ai_grade="Benign", grade_group=0, ai_confidence=0.0,
+                         regions_analyzed=0, processing_time_s=0.0, confirmed=True))
+_bl = _benign.splitlines()
+_gg = _bl[_bl.index("WHO/ISUP Grade") + 2].strip() if "WHO/ISUP Grade" in _bl else "?"
+check("W1 a benign slide reports grade group 0, not 'not assessed'",
+      _gg == "0", f"grade group rendered as {_gg!r}")
+check("W2 a genuine 0% confidence is reported, not blanked",
+      "0.0%" in _benign, "zero confidence rendered as '—'")
+
+# The model's confidence belongs to the model's prediction. Printed under a
+# doctor-corrected grade it attributed a model number to a human judgement —
+# the confidence of the very prediction the pathologist had overruled.
+_corr = _pdf_text(_pdf(ai_grade="3+4=7", doctor_correction="4+5=9", grade_group=5,
+                       ai_confidence=0.823, confirmed=True))
+check("W3 a corrected grade does not carry the overruled model's confidence",
+      "Model confidence: 82%" not in _corr and "Corrected by the reporting pathologist" in _corr,
+      "model confidence is still shown beneath a doctor-corrected grade")
+
+# A signed report has to say which software produced it, and when, truthfully.
+_foot = [line for line in _pdf_text(_pdf(ai_grade="4+5=9", grade_group=5, patient_id="P1",
+                                         analysis_date="2026-01-01", confirmed=True)).splitlines()
+         if "Omnia AI v" in line]
+check("W4 the report states the version that actually produced it",
+      bool(_foot) and f"v{_ver}" in _foot[0], f"footer says {_foot[0].strip() if _foot else '(missing)'}")
+check("W5 a timestamp labelled UTC is actually UTC",
+      bool(_foot) and _dt.datetime.now(_dt.timezone.utc).strftime("%H:") in _foot[0],
+      "the UTC-labelled timestamp is local time")
+
+# "An issued report can be produced again unchanged" — which a random report
+# ID made untrue.
+_args = dict(ai_grade="4+5=9", grade_group=5, patient_id="P1",
+             analysis_date="2026-01-01", confirmed=True)
+def _rid(pdf_bytes):
+    """The Report ID a generated PDF renders, or None if it carries none."""
+    m = _re.search(r"Report ID: ([0-9A-F]+)", _pdf_text(pdf_bytes))
+    return m.group(1) if m else None
+check("W6 reissuing the same report yields the same report ID",
+      _rid(_pdf(**_args)) == _rid(_pdf(**_args)) is not None,
+      "the report ID changes on every regeneration")
+check("W7 different patients do not share a report ID",
+      _rid(_pdf(**_args)) != _rid(_pdf(**{**_args, "patient_id": "P2"})),
+      "two patients produced the same report ID")
 
 print("\n=== U. BACKGROUND WORKERS & SELF-REPAIR ===")
 
@@ -795,8 +944,12 @@ _conn_code = re.sub(r"/\*.*?\*/", "", _conn, flags=re.S)
 check("V1 the start-up screen does not show a host and port",
       "Starting server at" not in _conn_code and "backend\u2026" not in _conn_code,
       "the launch screen still exposes the service address")
+# Matches the rendered label rather than the identifier that supplies it. The
+# earlier version grepped for API_BASE and failed the moment that constant was
+# replaced by apiBase(), even though the screen was unchanged — a test that
+# breaks on a rename is reporting on the source, not on the product.
 check("V2 the service address is still reachable for support",
-      "Technical details" in _conn and "API_BASE" in _conn,
+      "Technical details" in _conn and "Local service address" in _conn,
       "technical detail was removed entirely instead of being tucked away")
 check("V3 the failure screen tells the user what to try",
       "What to try" in _conn, "the error screen offers no next step")
@@ -807,6 +960,229 @@ check("V4 a saturated engine is retried rather than shown as an error",
       "Retry-After" in _trial_page and "503" in _trial_page,
       "the frontend still ignores the backend's retryable busy response")
 
+print("\n=== G. DATA-SUBJECT RIGHTS (GDPR) ===")
+# ─── Data-subject rights (GDPR) ────────────────────────────────────────────
+#
+# These endpoints hand over and destroy personal records, so the tests that
+# matter are the refusals, not the happy path.
+
+s, _path_login = req("POST", "/api/users/login", body={"username": "path1", "password": "Path12345!"})
+PATH_TOKEN = _path_login.get("token", "")
+
+s, _subj = req("POST", "/api/patients/", token=ADMIN,
+               body={"initials": "GD", "year_of_birth": 1962, "sex": "male",
+                     "site": "Vilnius", "notes": "a private note"})
+G_UID = _subj.get("uid", "")
+
+s, _ = req("GET", f"/api/gdpr/subjects/{G_UID}/export", token=ADMIN)
+check("G1 an administrator can export a subject record", s == 200,
+      f"export returned {s}")
+
+s, _ = req("GET", f"/api/gdpr/subjects/{G_UID}/export", token=PATH_TOKEN)
+check("G2 a non-administrator cannot export a subject record", s == 403,
+      f"a pathologist got {s} instead of 403 — subject access must be admin-only")
+
+s, _ = req("GET", f"/api/gdpr/subjects/{G_UID}/export")
+check("G3 subject export requires authentication", s in (401, 403),
+      f"an anonymous caller got {s}")
+
+# The export is itself a disclosure. Answering one subject-access request with
+# another subject's processing history would be a breach, not a feature.
+s, _export = req("GET", f"/api/gdpr/subjects/{G_UID}/export", token=ADMIN)
+_other_uids = {p["uid"] for p in (req("GET", "/api/patients/", token=ADMIN)[1] or [])
+               if p.get("uid") != G_UID}
+_history = json.dumps(_export.get("processing_history", []))
+check("G4 a subject export contains only that subject's history",
+      not any(u in _history for u in _other_uids),
+      "another subject's audit entries leaked into a subject-access response")
+
+# Redaction must clear identifiers without touching the measurements.
+s, _ = req("POST", f"/api/gdpr/subjects/{G_UID}/redact?reason=test", token=ADMIN)
+s, _after = req("GET", f"/api/patients/{G_UID}", token=ADMIN)
+check("G5 redaction clears every direct identifier",
+      s == 200 and _after.get("initials") == "" and _after.get("notes") == ""
+      and _after.get("site") == "" and _after.get("year_of_birth") is None,
+      f"identifiers survived redaction: {_after}")
+check("G6 redaction is recorded on the record itself",
+      _after.get("redacted") is True,
+      "the redaction flag was dropped — update_patient whitelists fields")
+
+# A subject carrying a signed slide cannot be erased: the signature is part of
+# the regulatory record. The refusal must explain itself.
+s, _sub2 = req("POST", "/api/patients/", token=ADMIN, body={"initials": "HJ"})
+S_UID = _sub2.get("uid", "")
+s, _v = req("POST", f"/api/trials/{TID}/patients", token=ADMIN, body={"patient_id": S_UID})
+_VID = _v.get("id", "")
+s, _ = req("PATCH", f"/api/trials/patients/{_VID}", token=ADMIN,
+           body={"slides": [{"id": "sg1", "confirmed": True, "grade_group": 2}]})
+s, _refusal = req("POST", f"/api/gdpr/subjects/{S_UID}/erase?reason=test", token=ADMIN)
+check("G7 erasure is refused while a signed slide exists", s == 409,
+      f"erasure returned {s} — a signed grade must survive erasure")
+_detail = (_refusal or {}).get("detail", {})
+check("G8 the refusal cites the Article and offers the alternative",
+      isinstance(_detail, dict) and "Article" in str(_detail.get("article", ""))
+      and _detail.get("alternative") == "redact",
+      f"the refusal gave no usable reason: {_detail}")
+
+# A clean subject erases, and the tombstone proves it without naming anyone.
+s, _erase = req("POST", f"/api/gdpr/subjects/{G_UID}/erase?reason=test", token=ADMIN)
+_stone = (_erase or {}).get("tombstone", {})
+check("G9 a subject with nothing blocking is erased", s == 200 and _stone.get("complete") is True,
+      f"erase returned {s}: {_erase}")
+# Search everything except the uid. The uid belongs in the tombstone — it is
+# the whole point of one — and a bare substring search over the entire record
+# false-positived when a randomly generated identifier happened to end in the
+# same two letters as the subject's initials (OMN-8D0M-TCGD against "GD"). A
+# test that fails on one run in twenty teaches people to re-run it, which is
+# worse than not having it.
+_stone_body = json.dumps({k: v for k, v in _stone.items() if k != "uid"})
+check("G10 the tombstone records the erasure without personal data",
+      "GD" not in _stone_body and "private note" not in _stone_body
+      and _stone.get("uid") == G_UID,
+      f"the tombstone leaked personal data: {_stone}")
+
+s, _ = req("GET", f"/api/gdpr/subjects/{G_UID}/export", token=ADMIN)
+check("G11 an erased subject reads as gone, not as never-existing", s == 410,
+      f"export of an erased subject returned {s} — a controller must be able "
+      f"to show the erasure happened")
+
+s, _ret = req("GET", "/api/gdpr/retention", token=ADMIN)
+check("G12 the retention position is reportable",
+      s == 200 and isinstance(_ret.get("retention_years"), int) and _ret["retention_years"] > 0,
+      f"retention returned {s}: {_ret}")
+
+s, _a30 = req("GET", "/api/gdpr/processing-activities", token=ADMIN)
+check("G13 an Article 30 record can be produced",
+      s == 200 and "special_category" in json.dumps(_a30)
+      and "limits_of_this_record" in _a30,
+      "the processing record is missing its Article 9 category or its own caveat")
+
+
+
+print("\n=== O. AUDIT TRAIL ORIGIN ===")
+#
+# 21 CFR Part 11 wants an audit entry to identify the source of a record. The
+# thing that matters is not that the field is populated — it is that it is
+# populated only when it is known, and blank rather than plausible otherwise.
+
+s, _events = req("GET", "/api/audit/", token=ADMIN)
+check("AO1 every audit entry carries an origin field",
+      s == 200 and all("ip" in e for e in _events),
+      "the origin field is missing from some entries")
+
+_http = [e for e in _events if e.get("ip")]
+check("AO2 an action taken over HTTP records where it came from",
+      len(_http) > 0,
+      "no audit entry recorded an origin, though every one of these was an API call")
+
+# The middleware must not trust a forwarding header: if it did, any caller
+# could choose the address written into their own audit record, which turns
+# the one field that attributes an action into the easiest one to falsify.
+s, _ = req("POST", "/api/patients/", token=ADMIN, body={"initials": "OR"},
+           )
+s, _after = req("GET", "/api/audit/", token=ADMIN)
+_origins = {e.get("ip") for e in _after if e.get("ip")}
+check("AO3 the recorded origin is the real peer, not a caller-supplied header",
+      all(o and not o.startswith("9.9.9") for o in _origins),
+      f"a spoofable origin was recorded: {_origins}")
+
+
+print("\n=== TR. TRIAL STATUS AND END DATE ===")
+
+s, _tr = req("POST", "/api/trials/", token=ADMIN,
+             body={"name": "TR-STATUS", "sponsor": "S", "drug": "D",
+                   "indication": "Prostate cancer", "phase": "Phase II"})
+_TRID = _tr.get("id", "")
+check("TR1 a new trial carries no end date",
+      not _tr.get("ended"),
+      f"a trial that has not ended was given an end date: {_tr.get('ended')!r}")
+
+s, _hold = req("POST", f"/api/trials/{_TRID}/status", token=ADMIN, body={"status": "on_hold"})
+check("TR2 a trial can be suspended without being closed",
+      s == 200 and _hold.get("status") == "on_hold",
+      f"on_hold was rejected ({s}) — a study paused by a monitoring committee "
+      f"would have to be recorded as finished")
+check("TR3 a suspended trial still has no end date",
+      not _hold.get("ended"),
+      "suspending a trial stamped an end date it has not reached")
+
+s, _closed = req("POST", f"/api/trials/{_TRID}/status", token=ADMIN, body={"status": "closed"})
+check("TR4 closing a trial stamps the end date",
+      s == 200 and bool(_closed.get("ended")),
+      "closing left no end date, so the date would have to be typed from memory later")
+
+s, _re = req("POST", f"/api/trials/{_TRID}/status", token=ADMIN, body={"status": "active"})
+check("TR5 reopening clears the end date",
+      s == 200 and not _re.get("ended"),
+      "a reopened trial kept an end date it has not reached")
+
+s, _bad = req("POST", f"/api/trials/{_TRID}/status", token=ADMIN, body={"status": "finished"})
+check("TR6 an unknown status is rejected", s >= 400,
+      f"an arbitrary status was accepted ({s})")
+
+
+print("\n=== US. USER ACCOUNTS ===")
+
+# last_login is stamped where the credential is accepted, so a rejected attempt
+# can never make a dormant account look like it is in use — which is exactly
+# what an access review would be reading this field to find out.
+s, _new = req("POST", "/api/users/", token=ADMIN,
+              body={"username": "dormant1", "password": "Dorm12345!",
+                    "full_name": "Dr Dormant One", "role": "pathologist"})
+check("US1 a new account has never signed in",
+      s == 200 and not _new.get("last_login"),
+      f"a brand-new account already carried a sign-in date: {_new.get('last_login')!r}")
+
+req("POST", "/api/users/login", body={"username": "dormant1", "password": "wrong-password"})
+s, _all = req("GET", "/api/users/", token=ADMIN)
+_d = next((u for u in _all if u.get("username") == "dormant1"), {})
+check("US2 a rejected sign-in does not stamp the date",
+      not _d.get("last_login"),
+      "a failed login moved last_login — a dormant account would look active")
+
+req("POST", "/api/users/login", body={"username": "dormant1", "password": "Dorm12345!"})
+s, _all = req("GET", "/api/users/", token=ADMIN)
+_d = next((u for u in _all if u.get("username") == "dormant1"), {})
+check("US3 an accepted sign-in stamps the date",
+      bool(_d.get("last_login")),
+      "a successful login left last_login empty")
+
+check("US4 the user list never exposes a password hash",
+      all("password_hash" not in u for u in _all),
+      "a password hash was returned to the client")
+
+
+print("\n=== SP. SUPPORT SURFACES ===")
+
+s, _cl = req("GET", "/api/system/changelog", token=ADMIN)
+check("SP1 the release notes shipped with the build are readable",
+      s == 200 and len(_cl.get("markdown", "")) > 100,
+      "no bundled release notes — the app would have to fetch them, which it cannot do offline")
+
+s, _raw = req_raw("GET", "/api/system/diagnostics", token=ADMIN)
+check("SP2 an administrator can generate a diagnostics bundle",
+      s == 200 and _raw[:2] == b"PK", f"diagnostics returned {s}")
+
+# The point of the bundle is that it can be emailed. That only holds if it
+# carries no patient data.
+import io as _io, zipfile as _zip
+try:
+    _z = _zip.ZipFile(_io.BytesIO(_raw))
+    _body = _z.read("diagnostics.json").decode()
+except Exception:
+    _body = ""
+check("SP3 the diagnostics bundle carries no patient data",
+      _body and not any(k in _body for k in ('"initials"', '"year_of_birth"', '"notes"', 'OMN-')),
+      "a support file that carries clinical records turns a support request into a disclosure")
+
+s, _ = req_raw("GET", "/api/system/diagnostics", token=PATH_TOKEN)
+check("SP4 a non-administrator cannot generate diagnostics", s == 403,
+      f"a pathologist got {s} — the bundle carries filesystem paths and a map of the machine")
+
+s, _ = req_raw("GET", "/api/system/diagnostics")
+check("SP5 diagnostics requires authentication", s in (401, 403), f"anonymous got {s}")
+
+
 print("\n" + "=" * 60)
 print(f"PASSED: {len(PASSES)}   FAILED: {len(FAILS)}")
 print("=" * 60)
@@ -814,6 +1190,7 @@ if FAILS:
     print("\nBUGS FOUND:")
     for n, d in FAILS:
         print(f"  * {n}\n      {d}")
+
 
 _stop_server()
 sys.exit(1 if FAILS else 0)

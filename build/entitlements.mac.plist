@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Entitlements for the hardened runtime.
+
+  Notarization requires hardenedRuntime, and the hardened runtime blocks
+  several things Electron and a PyInstaller-bundled Python both need. Without
+  these the app is signed and notarized correctly and then crashes on launch,
+  which is a worse failure than not signing at all because it only appears on
+  the customer's machine.
+
+  Each entitlement below is present for a specific reason, not copied wholesale:
+-->
+<plist version="1.0">
+<dict>
+    <!-- V8 compiles JavaScript to machine code at runtime. Without this the
+         renderer process cannot start. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+
+    <!-- Electron and CPython both write executable pages the hardened runtime
+         would otherwise refuse. -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+
+    <!-- The PyInstaller backend unpacks to a temp directory and loads its own
+         .dylibs from there. Library validation would reject them because they
+         are not signed by this team. -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+
+    <!-- PyInstaller onefile sets variables the loader reads at start-up. -->
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+
+    <!-- The app reads whole-slide images the user selects. Grading is local
+         and the application makes no outbound network requests, so no network
+         entitlement is requested. -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+</dict>
+</plist>

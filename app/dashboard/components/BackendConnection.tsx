@@ -14,7 +14,7 @@
 
 import { useEffect, useState, useRef, type ReactNode } from 'react';
 import { AlertTriangle, ChevronDown } from 'lucide-react';
-import { API_BASE } from '@/lib/constants';
+import { apiBase } from '@/lib/constants';
 import { Card, Button, IconBadge } from '@/components/ui';
 
 const POLL_INTERVAL = 3000;
@@ -83,18 +83,23 @@ export function BackendConnection({ children }: { children: ReactNode }) {
     let timerId: ReturnType<typeof setTimeout>;
 
     const check = async (): Promise<boolean> => {
+      const controller = new AbortController();
+      // Cleared in `finally`, not after the await. On the throw path — which
+      // is the path taken the whole time the backend is down, and so the one
+      // this polls hardest — the timer was being left pending to fire
+      // abort() at a controller that had already settled.
+      const timeout = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
       try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
-        const res = await fetch(`${API_BASE}/health`, {
+        const res = await fetch(`${apiBase()}/health`, {
           method: 'GET',
           cache: 'no-store',
           signal: controller.signal,
         });
-        clearTimeout(timeout);
         return res.ok;
       } catch {
         return false;
+      } finally {
+        clearTimeout(timeout);
       }
     };
 
@@ -142,7 +147,7 @@ export function BackendConnection({ children }: { children: ReactNode }) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-[var(--bg-primary)] theme-transition">
         <div className="flex flex-col items-center gap-6 max-w-sm text-center px-6">
-          <div className="w-[48px] h-[48px] rounded-full border-[3px] border-[#007AFF]/20 border-t-[#007AFF] animate-spin" />
+          <div className="w-[48px] h-[48px] rounded-full border-[3px] border-[var(--accent-border)] border-t-[var(--accent)] animate-spin" />
           <div className="flex flex-col gap-1">
             <span className="text-[13px] font-semibold">{stage.text}</span>
             <span className="text-[11px] text-[var(--text-secondary)]">
@@ -196,7 +201,7 @@ export function BackendConnection({ children }: { children: ReactNode }) {
           {showDetails && (
             <div className="mt-2 rounded-[8px] bg-[var(--skeleton-bg)] px-3 py-2">
               <p className="text-[10.5px] text-[var(--text-secondary)] leading-relaxed break-all">
-                Local service address: <code>{API_BASE}</code>
+                Local service address: <code>{apiBase()}</code>
               </p>
               <p className="text-[10.5px] text-[var(--text-secondary)] leading-relaxed mt-1">
                 A health check to this address did not succeed after{' '}

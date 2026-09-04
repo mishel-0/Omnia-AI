@@ -3,7 +3,9 @@ Produces professional PDFs matching clinical pathology report standards.
 """
 import os
 import io
+import hashlib
 import datetime
+from backend.version import __version__
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -122,7 +124,7 @@ def generate_pathology_pdf(
          Paragraph("Research Use Only", ParagraphStyle("RUO", parent=s["small"],
              textColor=RED, alignment=TA_RIGHT, fontName="Helvetica-Bold"))],
         [Paragraph("Clinical Trial Pathology Intelligence", s["subtitle"]),
-         Paragraph(f"Report generated: {analysis_date or datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}",
+         Paragraph(f"Report generated: {analysis_date or datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
                    ParagraphStyle("DateRight", parent=s["small"], alignment=TA_RIGHT))],
     ]
     t = Table(header_data, colWidths=[100*mm, 70*mm])
@@ -171,10 +173,23 @@ def generate_pathology_pdf(
         grade_text = doctor_correction if doctor_correction else ai_grade
         grade_label = "Doctor-Corrected Grade" if doctor_correction else "AI-Predicted Grade"
 
+        # The confidence figure belongs to the model's prediction, so it is
+        # shown only when the model's prediction is what is displayed. Printing
+        # it under a doctor-corrected grade attributed a model number to a
+        # human judgement — and specifically the confidence of the prediction
+        # the pathologist had just overruled, which read as though the
+        # correction itself carried 82% confidence.
+        if doctor_correction:
+            sub = "Corrected by the reporting pathologist"
+        elif ai_confidence is not None:
+            sub = f"Model confidence: {ai_confidence * 100:.0f}%"
+        else:
+            sub = "Model confidence: —"
+
         grade_data = [
             [Paragraph(grade_label, s["result_label"])],
             [Paragraph(grade_text, s["result_grade"])],
-            [Paragraph(f"Confidence: {ai_confidence*100:.0f}%" if ai_confidence is not None else "Confidence: —", s["small"])],
+            [Paragraph(sub, s["small"])],
         ]
         t = Table(grade_data, colWidths=[170*mm])
         t.setStyle(TableStyle(result_style))
@@ -186,8 +201,14 @@ def generate_pathology_pdf(
         [Paragraph("Parameter", s["label"]), Paragraph("Result", s["label"])],
         [Paragraph("Gleason Grade", s["value"]),
          Paragraph(doctor_correction or ai_grade or "Pending", s["value_bold"])],
+        # `if grade_group` treated grade group 0 as missing. Zero is not an
+        # absent value here — it is the ISUP grade group for benign tissue, so
+        # a benign slide printed "Grade Group: —" (not assessed) directly
+        # beneath "Gleason Grade: Benign", contradicting itself on the same
+        # signed page. Every optional field below is tested against None for
+        # the same reason.
         [Paragraph("WHO/ISUP Grade Group", s["value"]),
-         Paragraph(str(grade_group) if grade_group else "—", s["value_bold"])],
+         Paragraph(str(grade_group) if grade_group is not None else "—", s["value_bold"])],
         [Paragraph("Risk Category", s["value"]),
          Paragraph(risk_group or "—", s["value_bold"])],
         [Paragraph("AI Confidence", s["value"]),
@@ -361,9 +382,11 @@ def generate_pathology_pdf(
     quality_data = [
         ["Metric", "Value"],
         ["Model", model_version or "—"],
-        ["Confidence", f"{ai_confidence*100:.1f}%" if ai_confidence else "—"],
-        ["Regions Analyzed", f"{regions_analyzed:,} tiles ({suspicious_regions} flagged)" if regions_analyzed else "—"],
-        ["Processing Time", f"{processing_time_s:.1f}s" if processing_time_s else "—"],
+        ["Confidence", f"{ai_confidence*100:.1f}%" if ai_confidence is not None else "—"],
+        ["Regions Analyzed",
+         f"{regions_analyzed:,} tiles ({suspicious_regions if suspicious_regions is not None else 0} flagged)"
+         if regions_analyzed is not None else "—"],
+        ["Processing Time", f"{processing_time_s:.1f}s" if processing_time_s is not None else "—"],
         ["Tissue Quality", quality.get("tissue_quality", "—")],
         ["Staining Quality", quality.get("staining_quality", "—")],
         ["Artifacts Detected", quality.get("artifacts_detected", "—")],
@@ -398,9 +421,29 @@ def generate_pathology_pdf(
     )
     elements.append(Paragraph(disclaimer_text, s["disclaimer"]))
     elements.append(Spacer(1, 2*mm))
+    # Three separate defects lived in this one line.
+    #
+    # The version was hardcoded "v1.0" while the application was 1.2.3, so
+    # every signed report misattributed itself to software that had not
+    # produced it. backend/version.py exists precisely because three copies of
+    # the version had already drifted apart once; this was a fourth.
+    #
+    # The timestamp used datetime.now() — local time — and labelled it UTC. On
+    # a machine in Lithuania that is a signed clinical document stating a time
+    # several hours from the one it claims.
+    #
+    # And the report ID was os.urandom(4), so regenerating a stored report
+    # produced a different identifier every time. Deriving it from the report's
+    # own identifying content makes reissuing an existing report reproducible,
+    # which is what a report ID is for.
+    fingerprint = "|".join([
+        trial_name, patient_id, visit, slide_filename, analysis_date,
+        doctor_correction or ai_grade or "", signed_at,
+    ])
+    report_id = hashlib.sha256(fingerprint.encode()).hexdigest()[:8].upper()
+    generated_utc = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     elements.append(Paragraph(
-        f"Omnia AI v1.0 | Generated {datetime.datetime.now().strftime('%Y-%m-%d %H:%M UTC')} | "
-        f"Report ID: {os.urandom(4).hex().upper()}",
+        f"Omnia AI v{__version__} | Generated {generated_utc} | Report ID: {report_id}",
         s["footer"]
     ))
 
@@ -433,7 +476,9 @@ def generate_trial_summary_pdf(
     # Header
     elements.append(Paragraph(f"TRIAL SUMMARY: {trial_name}", s["title"]))
     elements.append(Paragraph(f"{sponsor} — {drug}", s["subtitle"]))
-    elements.append(Paragraph(f"Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}", s["small"]))
+    elements.append(Paragraph(
+        f"Generated: {datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
+        s["small"]))
     elements.append(Spacer(1, 5*mm))
 
     if not patients:
