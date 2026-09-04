@@ -32,7 +32,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   BookOpen, Activity, FileText, LifeBuoy, ChevronRight, Download, Search,
-  CheckCircle2, AlertTriangle, ShieldCheck, RefreshCw,
+  CheckCircle2, AlertTriangle, ShieldCheck, RefreshCw, Cpu,
 } from 'lucide-react';
 import { Card, Button, Skeleton } from '@/components/ui';
 import { apiFetch, apiSend, useAuth } from '@/lib/auth';
@@ -260,6 +260,8 @@ export default function HelpPage() {
             </Button>
           </Card>
 
+          <SystemRequirements />
+
           <Card size="md" className="p-5">
             <h2 className="text-[15px] font-semibold mb-1">Getting support</h2>
             <p className="text-[12px] text-[var(--text-secondary)] leading-relaxed">
@@ -331,6 +333,80 @@ function Faq({ q, a }: { q: string; a: string }) {
           {a}
         </p>
       )}
+    </div>
+  );
+}
+
+
+/** What a machine needs to run this, so a site can check before installing.
+ *
+ * Every figure here was measured on a build of this application rather than
+ * estimated: peak memory while grading, the installed size, and the minimum OS
+ * from the bundle itself. The processor line is the one that actually excludes
+ * machines, so it is stated first and without hedging — PyTorch stopped
+ * publishing macOS x86_64 builds after 2.2.2, and this application runs a much
+ * later version, so an Intel Mac cannot be supported by packaging alone.
+ */
+function SystemRequirements() {
+  const platform = typeof window !== 'undefined'
+    ? (window as unknown as { omnia?: { platform?: string } }).omnia?.platform
+    : undefined;
+  const isWindows = platform === 'win32';
+
+  return (
+    <Card size="md" className="p-5">
+      <div className="flex items-center gap-2.5 mb-3">
+        <span className="w-9 h-9 rounded-[14px] bg-[#5856D6]/12 grid place-items-center shrink-0">
+          <Cpu className="w-4 h-4 text-[#5856D6]" />
+        </span>
+        <div>
+          <h2 className="text-[15px] font-semibold">System requirements</h2>
+          <p className="text-[11px] text-[var(--text-secondary)]">
+            To run grading — training needs more
+          </p>
+        </div>
+      </div>
+
+      <dl className="space-y-2.5">
+        {isWindows ? (
+          <Req label="Operating system" value="Windows 10 or 11, 64-bit" />
+        ) : (
+          <>
+            <Req label="Operating system" value="macOS 12 Monterey or later" />
+            {/* The one requirement that rules machines out, so it does not sit
+                quietly in a list as though it were negotiable. */}
+            <div className="rounded-[14px] border border-[#FF9500]/30 bg-[#FF9500]/10 px-3.5 py-2.5">
+              <p className="text-[12px] font-medium">Apple Silicon required</p>
+              <p className="text-[11.5px] text-[var(--text-secondary)] leading-relaxed mt-0.5">
+                M1 or later. Intel Macs are not supported and cannot be: the inference
+                engine this version uses is no longer published for Intel processors.
+              </p>
+            </div>
+          </>
+        )}
+        <Req label="Memory" value="8 GB" note="Grading itself peaks near 1 GB" />
+        <Req label="Disk" value="2 GB" note="1.4 GB for the application, plus your slides" />
+        <Req label="Graphics" value="Not required" note="Grading runs on the processor" />
+        <Req label="Network" value="Not required" note="Nothing is sent anywhere" />
+      </dl>
+
+      <p className="text-[11.5px] text-[var(--text-secondary)] leading-relaxed mt-3.5 pt-3.5 border-t border-[var(--border-subtle)]">
+        A slide takes a few seconds to grade, most of it spent finding tissue rather
+        than running the model — so a large slide takes longer than a small one, and
+        a faster processor helps more than extra memory.
+      </p>
+    </Card>
+  );
+}
+
+function Req({ label, value, note }: { label: string; value: string; note?: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <dt className="text-[12px] text-[var(--text-secondary)] shrink-0">{label}</dt>
+      <dd className="text-right min-w-0">
+        <span className="block text-[12px] font-medium">{value}</span>
+        {note && <span className="block text-[11px] text-[var(--text-secondary)] leading-snug">{note}</span>}
+      </dd>
     </div>
   );
 }
