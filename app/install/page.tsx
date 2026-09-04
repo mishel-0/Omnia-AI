@@ -6,7 +6,7 @@ import {
   Sparkles, ShieldCheck, CheckCircle2, UserPlus, Loader2,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { API_BASE } from '@/lib/constants';
+import { apiBase } from '@/lib/constants';
 import { Button, BrandMark } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 
@@ -60,7 +60,7 @@ export default function InstallPage() {
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch(`${API_BASE}/api/license/status`);
+        const r = await fetch(`${apiBase()}/api/license/status`);
         if (r.ok) {
           const d = await r.json();
           if (d.valid) {
@@ -70,7 +70,7 @@ export default function InstallPage() {
         }
       } catch { /* surfaced on the checks step */ }
       try {
-        const r = await fetch(`${API_BASE}/api/users/bootstrap-needed`);
+        const r = await fetch(`${apiBase()}/api/users/bootstrap-needed`);
         if (r.ok) setBootstrapNeeded((await r.json()).needed);
       } catch { setBootstrapNeeded(null); }
     })();
@@ -79,7 +79,7 @@ export default function InstallPage() {
   const runChecks = useCallback(async () => {
     setPreflight(null);
     try {
-      const r = await fetch(`${API_BASE}/api/system/preflight`);
+      const r = await fetch(`${apiBase()}/api/system/preflight`);
       if (r.ok) { setPreflight(await r.json()); return; }
     } catch { /* fall through to the unreachable case */ }
     setPreflight({
@@ -103,7 +103,7 @@ export default function InstallPage() {
     setLicenseState('checking');
     setLicenseMessage('');
     try {
-      const r = await fetch(`${API_BASE}/api/license/activate`, {
+      const r = await fetch(`${apiBase()}/api/license/activate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key }),

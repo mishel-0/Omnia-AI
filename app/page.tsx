@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Card, StatTile, BrandMark } from '@/components/ui';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { apiBase } from '@/lib/constants';
 
 export default function Home() {
   const router = useRouter();
@@ -34,7 +34,7 @@ export default function Home() {
 
     const checkBackend = async () => {
       try {
-        const response = await fetch(`${API_BASE}/health`);
+        const response = await fetch(`${apiBase()}/health`);
         if (response.ok) {
           setBackendStatus('online');
           setTimeout(async () => {
@@ -43,7 +43,7 @@ export default function Home() {
               return;
             }
             try {
-              const licRes = await fetch(`${API_BASE}/api/license/status`);
+              const licRes = await fetch(`${apiBase()}/api/license/status`);
               const lic = await licRes.json();
               if (lic.valid) {
                 router.push('/dashboard');

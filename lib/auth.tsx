@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { API_BASE } from '@/lib/constants';
+import { apiBase } from '@/lib/constants';
 
 export type Role = 'admin' | 'pathologist' | 'monitor' | 'sponsor';
 
@@ -58,7 +58,7 @@ export async function apiFetch(path: string, opts: RequestInit = {}): Promise<Re
   if (opts.body && typeof opts.body === 'string' && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
-  const res = await fetch(`${API_BASE}${path}`, { ...opts, headers });
+  const res = await fetch(`${apiBase()}${path}`, { ...opts, headers });
 
   if (res.status === 401 && token && typeof window !== 'undefined') {
     clearStoredToken();
@@ -123,7 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (username: string, password: string) => {
     try {
-      const res = await fetch(`${API_BASE}/api/users/login`, {
+      const res = await fetch(`${apiBase()}/api/users/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
@@ -140,7 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const bootstrap = useCallback(async (username: string, password: string, fullName: string) => {
     try {
-      const res = await fetch(`${API_BASE}/api/users/bootstrap`, {
+      const res = await fetch(`${apiBase()}/api/users/bootstrap`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password, full_name: fullName }),

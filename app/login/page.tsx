@@ -6,7 +6,7 @@ import { CheckCircle, XCircle, Key, User, Lock, UserPlus } from 'lucide-react';
 import { Card, Button, BrandMark } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { apiBase } from '@/lib/constants';
 
 type Stage = 'checking' | 'license' | 'auth';
 
@@ -38,7 +38,7 @@ export default function LoginPage() {
       return;
     }
 
-    fetch(`${API_BASE}/api/license/status`)
+    fetch(`${apiBase()}/api/license/status`)
       .then((r) => r.json())
       .then((data) => {
         if (data.valid) {
@@ -61,7 +61,7 @@ export default function LoginPage() {
 
   const checkAuthStage = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/users/bootstrap-needed`);
+      const res = await fetch(`${apiBase()}/api/users/bootstrap-needed`);
       const data = await res.json();
       setNeedsBootstrap(!!data.needed);
     } catch {
@@ -74,7 +74,7 @@ export default function LoginPage() {
     if (!licenseKey.trim()) return;
     setLicenseStatus('validating');
     try {
-      const res = await fetch(`${API_BASE}/api/license/activate`, {
+      const res = await fetch(`${apiBase()}/api/license/activate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: licenseKey.trim() }),

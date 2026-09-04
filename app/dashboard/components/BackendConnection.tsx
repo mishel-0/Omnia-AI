@@ -14,7 +14,7 @@
 
 import { useEffect, useState, useRef, type ReactNode } from 'react';
 import { AlertTriangle, ChevronDown } from 'lucide-react';
-import { API_BASE } from '@/lib/constants';
+import { apiBase } from '@/lib/constants';
 import { Card, Button, IconBadge } from '@/components/ui';
 
 const POLL_INTERVAL = 3000;
@@ -90,7 +90,7 @@ export function BackendConnection({ children }: { children: ReactNode }) {
       // abort() at a controller that had already settled.
       const timeout = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
       try {
-        const res = await fetch(`${API_BASE}/health`, {
+        const res = await fetch(`${apiBase()}/health`, {
           method: 'GET',
           cache: 'no-store',
           signal: controller.signal,
@@ -201,7 +201,7 @@ export function BackendConnection({ children }: { children: ReactNode }) {
           {showDetails && (
             <div className="mt-2 rounded-[8px] bg-[var(--skeleton-bg)] px-3 py-2">
               <p className="text-[10.5px] text-[var(--text-secondary)] leading-relaxed break-all">
-                Local service address: <code>{API_BASE}</code>
+                Local service address: <code>{apiBase()}</code>
               </p>
               <p className="text-[10.5px] text-[var(--text-secondary)] leading-relaxed mt-1">
                 A health check to this address did not succeed after{' '}

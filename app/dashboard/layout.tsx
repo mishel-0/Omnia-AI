@@ -8,7 +8,7 @@ import AppErrorBoundary from '@/app/dashboard/components/AppErrorBoundary';
 import { useAuth } from '@/lib/auth';
 import { OnboardingProvider } from '@/lib/onboarding';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { apiBase } from '@/lib/constants';
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const [licenseChecking, setLicenseChecking] = useState(true);
@@ -26,7 +26,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    fetch(`${API_BASE}/api/license/status`)
+    fetch(`${apiBase()}/api/license/status`)
       .then(r => r.json())
       .then(data => {
         if (!data.valid) {

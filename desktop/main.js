@@ -9,8 +9,19 @@ let mainWindow = null;
 let backendProcess = null;
 let frontendServer = null;
 
-const BACKEND_PORT = 8000;
-const FRONTEND_PORT = 3000;
+// Preferred ports, not fixed ones. 3000 in particular is the default for most
+// Node development servers, so on a machine that does any web work at all it is
+// frequently taken — and the previous behaviour was a dialog telling the user
+// to close whatever held it, which on a managed hospital workstation is not
+// something they can act on. These are now the starting point of a search.
+const PREFERRED_BACKEND_PORT = 8000;
+const PREFERRED_FRONTEND_PORT = 3000;
+const PORT_SEARCH_RANGE = 40;
+
+// Resolved at startup and used everywhere after. Both services bind to
+// loopback, so a non-default port changes nothing a user can see.
+let backendPort = PREFERRED_BACKEND_PORT;
+let frontendPort = PREFERRED_FRONTEND_PORT;
 
 // ── Startup logging ──────────────────────────────────────────────────────
 // When the app is launched from Finder there is no console attached, so a
@@ -76,6 +87,15 @@ function isPortInUse(port) {
   });
 }
 
+/** The first free port at or above `preferred`, or null if none in range. */
+async function findFreePort(preferred, taken = []) {
+  for (let port = preferred; port < preferred + PORT_SEARCH_RANGE; port++) {
+    if (taken.includes(port)) continue;
+    if (!(await isPortInUse(port))) return port;
+  }
+  return null;
+}
+
 // ── Path resolution ─────────────────────────────────────────────────────
 function getBackendPath() {
   if (app.isPackaged) {
@@ -130,6 +150,7 @@ function startBackend() {
       ...process.env,
       PYTHONUNBUFFERED: '1',
       OMNIA_DATA_DIR: dataDir,
+      PORT: String(backendPort),
     },
   });
   backendProcess.stdout.on('data', (d) => console.log(`[Backend] ${d.toString().trim()}`));
@@ -151,7 +172,7 @@ function startFrontendServer() {
   const modulesPath = path.join(frontendDir, 'node_modules');
   const modulesBak = path.join(frontendDir, '_modules');
 
-  const env = { ...process.env, PORT: String(FRONTEND_PORT), HOSTNAME: '127.0.0.1' };
+  const env = { ...process.env, PORT: String(frontendPort), HOSTNAME: '127.0.0.1' };
 
   // electron-builder strips node_modules; use _modules as NODE_PATH fallback
   if (!fs.existsSync(modulesPath)) {
@@ -222,7 +243,7 @@ function waitForService(name, url, statusCheck, maxRetries, interval) {
 function waitForBackend() {
   return waitForService(
     'Backend',
-    `http://127.0.0.1:${BACKEND_PORT}/health`,
+    `http://127.0.0.1:${backendPort}/health`,
     (code) => code === 200,
     60,
     2000,
@@ -232,7 +253,7 @@ function waitForBackend() {
 function waitForFrontend() {
   return waitForService(
     'Frontend',
-    `http://127.0.0.1:${FRONTEND_PORT}/login`,
+    `http://127.0.0.1:${frontendPort}/login`,
     (code) => code >= 200 && code < 400,
     30,
     2000,
@@ -254,11 +275,15 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
+      // The page's API base is compiled in at build time and therefore always
+      // says 8000. When the search lands the backend somewhere else, this is
+      // how the renderer finds out — read by preload before any page script.
+      additionalArguments: [`--omnia-api-base=http://127.0.0.1:${backendPort}`],
     },
     icon: path.join(__dirname, 'icon.png'),
     show: false,
   });
-  mainWindow.loadURL(`http://127.0.0.1:${FRONTEND_PORT}/login`);
+  mainWindow.loadURL(`http://127.0.0.1:${frontendPort}/login`);
   mainWindow.webContents.on('did-navigate', (_e, url) => applyWindowModeForURL(url));
   mainWindow.webContents.on('did-navigate-in-page', (_e, url) => applyWindowModeForURL(url));
   mainWindow.once('ready-to-show', () => mainWindow.show());
@@ -337,12 +362,7 @@ async function reclaimOwnPorts() {
   if (reclaimed) await new Promise((r) => setTimeout(r, 800));  // let the sockets close
 }
 
-// "Try Again" on the port dialog used to call startApp() from inside its own
-// await, so frames stacked for as long as the user kept pressing. A loop with
-// a bound does the same job without growing, and gives the retry an end.
-const MAX_PORT_RETRIES = 5;
-
-async function startApp(attempt = 0) {
+async function startApp() {
   if (isRunningFromDiskImage()) {
     dialog.showErrorBox(
       'Please Install Omnia Pathology AI First',
@@ -362,31 +382,32 @@ async function startApp(attempt = 0) {
   // third-party conflict.
   await reclaimOwnPorts();
 
-  const backendBusy = await isPortInUse(BACKEND_PORT);
-  const frontendBusy = await isPortInUse(FRONTEND_PORT);
+  // Move aside rather than refuse. Both services are loopback-only, so which
+  // port they end up on is an implementation detail — where it used to be a
+  // reason the application would not open at all.
+  const foundBackend = await findFreePort(PREFERRED_BACKEND_PORT);
+  const foundFrontend = await findFreePort(PREFERRED_FRONTEND_PORT, [foundBackend]);
 
-  if (backendBusy || frontendBusy) {
-    const ports = [];
-    if (backendBusy) ports.push(`port ${BACKEND_PORT} (backend)`);
-    if (frontendBusy) ports.push(`port ${FRONTEND_PORT} (frontend)`);
-    const exhausted = attempt >= MAX_PORT_RETRIES;
-    const { response } = await dialog.showMessageBox({
-      type: 'warning',
-      title: 'Port In Use',
-      message: `Another application is using ${ports.join(' and ')}.`,
-      detail: exhausted
-        ? 'Omnia Pathology AI needs these ports for its local engine, and they are '
-          + 'still in use after several attempts. Restart this computer, or close the '
-          + 'application holding them, then open Omnia again.'
-        : 'Omnia Pathology AI needs these ports for its local engine. Close the other '
-          + 'application, then choose Try Again.',
-      buttons: exhausted ? ['Quit'] : ['Try Again', 'Quit'],
-      defaultId: 0,
-      cancelId: exhausted ? 0 : 1,
+  if (foundBackend === null || foundFrontend === null) {
+    await dialog.showMessageBox({
+      type: 'error',
+      title: 'No free port',
+      message: 'Omnia Pathology AI could not find a free port on this computer.',
+      detail: `Every port between ${PREFERRED_BACKEND_PORT} and `
+        + `${PREFERRED_BACKEND_PORT + PORT_SEARCH_RANGE}, and between `
+        + `${PREFERRED_FRONTEND_PORT} and ${PREFERRED_FRONTEND_PORT + PORT_SEARCH_RANGE}, `
+        + 'is in use. This is unusual — restarting the computer normally clears it.',
+      buttons: ['Quit'],
     });
-    if (!exhausted && response === 0) { await startApp(attempt + 1); return; }
     app.quit();
     return;
+  }
+
+  backendPort = foundBackend;
+  frontendPort = foundFrontend;
+  if (backendPort !== PREFERRED_BACKEND_PORT || frontendPort !== PREFERRED_FRONTEND_PORT) {
+    console.log(`[Omnia] Preferred ports were taken; using backend ${backendPort}, `
+              + `frontend ${frontendPort}`);
   }
 
   startBackend();

@@ -944,8 +944,12 @@ _conn_code = re.sub(r"/\*.*?\*/", "", _conn, flags=re.S)
 check("V1 the start-up screen does not show a host and port",
       "Starting server at" not in _conn_code and "backend\u2026" not in _conn_code,
       "the launch screen still exposes the service address")
+# Matches the rendered label rather than the identifier that supplies it. The
+# earlier version grepped for API_BASE and failed the moment that constant was
+# replaced by apiBase(), even though the screen was unchanged — a test that
+# breaks on a rename is reporting on the source, not on the product.
 check("V2 the service address is still reachable for support",
-      "Technical details" in _conn and "API_BASE" in _conn,
+      "Technical details" in _conn and "Local service address" in _conn,
       "technical detail was removed entirely instead of being tucked away")
 check("V3 the failure screen tells the user what to try",
       "What to try" in _conn, "the error screen offers no next step")
