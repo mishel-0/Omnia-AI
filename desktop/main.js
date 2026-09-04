@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, nativeTheme, dialog } = require('electron');
 const { spawn, fork, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -260,6 +260,13 @@ function waitForFrontend() {
   );
 }
 
+/** The colour behind the interface, so a window with no renderer attached
+ *  looks like the application rather than like a blank page. Kept in step with
+ *  --shell-bg in app/globals.css. */
+function shellColour() {
+  return nativeTheme.shouldUseDarkColors ? '#07070D' : '#E9E9F0';
+}
+
 // ── Window management ──────────────────────────────────────────────────
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -282,11 +289,31 @@ function createWindow() {
     },
     icon: path.join(__dirname, 'icon.png'),
     show: false,
+    // Electron paints a new window white until the renderer has something to
+    // show, and paints it white again once the renderer is torn down. Opening
+    // was already covered by show:false plus ready-to-show; closing was not, so
+    // dismissing the window flashed white for a frame before it went away.
+    //
+    // Matched to the application's own shell colour rather than to plain black,
+    // and to the system appearance because that is what the app itself follows
+    // when the user has expressed no preference.
+    backgroundColor: shellColour(),
   });
+
+  // Hide before the window is destroyed. Even with a matching background there
+  // is a moment where the surface is gone and the frame is not, and hiding
+  // first means nobody ever sees it.
+  mainWindow.on('close', () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide(); });
   mainWindow.loadURL(`http://127.0.0.1:${frontendPort}/login`);
   mainWindow.webContents.on('did-navigate', (_e, url) => applyWindowModeForURL(url));
   mainWindow.webContents.on('did-navigate-in-page', (_e, url) => applyWindowModeForURL(url));
   mainWindow.once('ready-to-show', () => mainWindow.show());
+
+  // Someone switching macOS to dark at 6pm should not leave a light frame
+  // behind the interface for the rest of the session.
+  nativeTheme.on('updated', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setBackgroundColor(shellColour());
+  });
   // Show window after 15s even if page hasn't loaded (loading indicator)
   setTimeout(() => {
     if (mainWindow && !mainWindow.isVisible()) {
@@ -529,9 +556,51 @@ app.on('window-all-closed', () => {
   }
 });
 
+/** The same teardown without blocking the main thread.
+ *
+ * Only safe where the event loop is still turning — which is true of
+ * 'before-quit' but not of 'exit', so the synchronous version above remains
+ * for those. Bounded by the same deadline, so a process that ignores SIGTERM
+ * still gets SIGKILL and quitting still finishes.
+ */
+async function stopServersAsync() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
+  const pids = [
+    ['frontend', frontendServer && frontendServer.pid],
+    ['backend', backendProcess && backendProcess.pid],
+  ].filter(([, pid]) => pid);
+
+  for (const [, pid] of pids) killTree(pid, 'SIGTERM');
+
+  const deadline = Date.now() + SIGKILL_AFTER_MS;
+  while (Date.now() < deadline && pids.some(([, pid]) => isAlive(pid))) {
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  for (const [name, pid] of pids) {
+    if (isAlive(pid)) {
+      console.log(`[Omnia] ${name} (${pid}) ignored SIGTERM — forcing.`);
+      killTree(pid, 'SIGKILL');
+    }
+  }
+
+  try { fs.unlinkSync(PID_FILE); } catch { /* nothing recorded */ }
+  frontendServer = null;
+  backendProcess = null;
+}
+
 // The teardown that actually matters: without it, quitting left the backend
 // and frontend running and holding their ports.
-app.on('before-quit', stopServers);
+let teardownFinished = false;
+app.on('before-quit', (e) => {
+  if (teardownFinished) return;
+  // Take the window off screen first, so quitting looks immediate even though
+  // the services take a moment to stop behind it.
+  e.preventDefault();
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+  stopServersAsync().finally(() => { teardownFinished = true; app.quit(); });
+});
 process.on('exit', stopServers);
 process.on('SIGINT', () => { stopServers(); process.exit(0); });
 process.on('SIGTERM', () => { stopServers(); process.exit(0); });
