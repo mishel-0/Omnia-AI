@@ -1029,8 +1029,15 @@ s, _erase = req("POST", f"/api/gdpr/subjects/{G_UID}/erase?reason=test", token=A
 _stone = (_erase or {}).get("tombstone", {})
 check("G9 a subject with nothing blocking is erased", s == 200 and _stone.get("complete") is True,
       f"erase returned {s}: {_erase}")
+# Search everything except the uid. The uid belongs in the tombstone — it is
+# the whole point of one — and a bare substring search over the entire record
+# false-positived when a randomly generated identifier happened to end in the
+# same two letters as the subject's initials (OMN-8D0M-TCGD against "GD"). A
+# test that fails on one run in twenty teaches people to re-run it, which is
+# worse than not having it.
+_stone_body = json.dumps({k: v for k, v in _stone.items() if k != "uid"})
 check("G10 the tombstone records the erasure without personal data",
-      "GD" not in json.dumps(_stone) and "private note" not in json.dumps(_stone)
+      "GD" not in _stone_body and "private note" not in _stone_body
       and _stone.get("uid") == G_UID,
       f"the tombstone leaked personal data: {_stone}")
 

@@ -165,12 +165,29 @@ echo "  ✅ Clean"
 echo ""
 echo "[4/4] Packaging Electron app..."
 
+# A signing certificate that is defined-but-empty is worse than one that is
+# absent. GitHub Actions substitutes an empty string for a secret that does not
+# exist, so `CSC_LINK: ${{ secrets.MAC_CERT_P12 }}` arrives as CSC_LINK="" —
+# which electron-builder reads as "a certificate path was supplied", tries to
+# resolve, and fails with "<project dir> not a file". Locally the variable is
+# unset entirely, which is why this only ever broke in CI.
+#
+# Unset the empty ones so an unsigned build is treated as an unsigned build.
+NOTARIZE_FLAG=""
+if [ -z "${CSC_LINK:-}" ]; then
+    unset CSC_LINK CSC_KEY_PASSWORD 2>/dev/null || true
+    # Nothing to notarize without a certificate, and asking would fail late.
+    NOTARIZE_FLAG="--config.mac.notarize=false"
+    export CSC_IDENTITY_AUTO_DISCOVERY=false
+    echo "  ℹ️  No signing certificate — building unsigned."
+fi
+
 if [ "$PLATFORM" = "mac" ]; then
-    run_step electron-builder-mac npx electron-builder --mac --publish never --config.extraMetadata.main=desktop/main.js
+    run_step electron-builder-mac npx electron-builder --mac --publish never $NOTARIZE_FLAG --config.extraMetadata.main=desktop/main.js
 elif [ "$PLATFORM" = "win" ]; then
     run_step electron-builder-win npx electron-builder --win --publish never --config.extraMetadata.main=desktop/main.js
 elif [ "$PLATFORM" = "all" ]; then
-    run_step electron-builder-all npx electron-builder --mac --win --publish never --config.extraMetadata.main=desktop/main.js
+    run_step electron-builder-all npx electron-builder --mac --win --publish never $NOTARIZE_FLAG --config.extraMetadata.main=desktop/main.js
 fi
 
 # Keep the build output out of Spotlight. Without this, the freshly built
