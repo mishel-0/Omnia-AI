@@ -64,6 +64,7 @@ export default function UsersPage() {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [creatingUser, setCreatingUser] = useState(false);
   const [form, setForm] = useState({
     username: '', password: '', full_name: '', role: 'pathologist' as Role,
   });
@@ -92,11 +93,13 @@ export default function UsersPage() {
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const createUser = async () => {
+    if (creatingUser) return;  // guards against a double-click firing two POSTs
     setError('');
     if (!form.username || !form.password || !form.full_name) {
       setError('Name, username and password are all required.');
       return;
     }
+    setCreatingUser(true);
     try {
       const res = await apiFetch('/api/users/', { method: 'POST', body: JSON.stringify(form) });
       const data = await res.json();
@@ -107,6 +110,8 @@ export default function UsersPage() {
       toast.show(`${data.full_name} added as ${ROLE_LABELS[data.role as Role]}`);
     } catch {
       setError('Could not connect to the backend.');
+    } finally {
+      setCreatingUser(false);
     }
   };
 
@@ -262,7 +267,7 @@ export default function UsersPage() {
 
       {showCreate && (
         <CreateUserDialog
-          form={form} setForm={setForm} error={error}
+          form={form} setForm={setForm} error={error} submitting={creatingUser}
           onCancel={() => { setShowCreate(false); setError(''); }}
           onSubmit={createUser}
         />
@@ -471,12 +476,13 @@ function UserRow({ user: u, isYou, onSetActive }: {
   );
 }
 
-function CreateUserDialog({ form, setForm, error, onCancel, onSubmit }: {
+function CreateUserDialog({ form, setForm, error, submitting, onCancel, onSubmit }: {
   form: { username: string; password: string; full_name: string; role: Role };
   setForm: React.Dispatch<React.SetStateAction<{
     username: string; password: string; full_name: string; role: Role;
   }>>;
   error: string;
+  submitting: boolean;
   onCancel: () => void;
   onSubmit: () => void;
 }) {
@@ -533,8 +539,10 @@ function CreateUserDialog({ form, setForm, error, onCancel, onSubmit }: {
         )}
 
         <div className="flex justify-end gap-2 mt-5">
-          <Button variant="secondary" size="sm" onClick={onCancel}>Cancel</Button>
-          <Button size="sm" className="btn-gradient" onClick={onSubmit}>Add user</Button>
+          <Button variant="secondary" size="sm" onClick={onCancel} disabled={submitting}>Cancel</Button>
+          <Button size="sm" className="btn-gradient" onClick={onSubmit} disabled={submitting}>
+            {submitting ? 'Adding…' : 'Add user'}
+          </Button>
         </div>
       </div>
     </div>

@@ -344,6 +344,16 @@ export default function TrialDetail() {
   const { prompt, confirm } = useDialogs();
 
   const [trial, setTrial] = useState<Trial | null>(null);
+  // The backend rejects add_patient/add_slide_upload on a closed trial
+  // (backend/trials.py), but these action controls were previously gated
+  // only by role, never by trial status — a writable-role user saw fully
+  // enabled Add Patient/Upload buttons on a closed trial, and only found out
+  // it was rejected after filling in a form and submitting, via a raw error
+  // string. trialOpen composes with `writable` everywhere those two
+  // controls are gated below. (confirm/correct are NOT gated by this —
+  // the backend doesn't restrict those on a closed trial either, e.g. for
+  // wrap-up signing, so gating them here would be a new mismatch, not a fix.)
+  const trialOpen = trial?.status !== 'closed';
   const [patients, setPatients] = useState<Patient[]>([]);
   const [queries, setQueries] = useState<TrialQuery[]>([]);
   const [expandedQueries, setExpandedQueries] = useState<Record<string, boolean>>({});
@@ -395,6 +405,12 @@ export default function TrialDetail() {
   const [flagFor, setFlagFor] = useState<string | null>(null);
   const [flagForm, setFlagForm] = useState({ subject: '', description: '' });
   const [respondText, setRespondText] = useState<Record<string, string>>({});
+  // Neither raiseQuery nor respondQuery tracked a busy state, so a
+  // double-click (or Enter-then-click) could fire two POSTs and create a
+  // duplicate query or response. respondingQueryIds is keyed per-query since
+  // responding to one query shouldn't block responding to a different one.
+  const [raisingQuery, setRaisingQuery] = useState(false);
+  const [respondingQueryIds, setRespondingQueryIds] = useState<Record<string, boolean>>({});
   const [analyzingIds, setAnalyzingIds] = useState<Record<string, boolean>>({});
   const [analysisStage, setAnalysisStage] = useState<Record<string, number>>({});
   const [expandedSlides, setExpandedSlides] = useState<Record<string, boolean>>({});
@@ -471,8 +487,27 @@ export default function TrialDetail() {
   };
 
   const handleDrop = async (patientId: string, files: FileList) => {
-    for (const file of Array.from(files)) {
-      if (!file.name.endsWith('.svs')) continue;
+    const all = Array.from(files);
+    // Non-.svs files used to be filtered here with a bare `continue` --
+    // silently dropped, no toast, no count. Someone dragging in a folder of
+    // 200 files (a real bulk-upload scenario, not just a handful) where 50
+    // are .png thumbnails or .DS_Store cruft would have no idea 50 files
+    // never made it in at all. Collect and report them instead.
+    const svsFiles = all.filter((f) => f.name.endsWith('.svs'));
+    const skipped = all.filter((f) => !f.name.endsWith('.svs'));
+    if (skipped.length > 0) {
+      toast.show(
+        `${skipped.length} file${skipped.length === 1 ? '' : 's'} skipped (not .svs): `
+        + skipped.slice(0, 3).map((f) => f.name).join(', ')
+        + (skipped.length > 3 ? `, +${skipped.length - 3} more` : ''),
+        'error',
+      );
+    }
+    if (svsFiles.length === 0) return;
+
+    let uploaded = 0;
+    let failed = 0;
+    for (const file of svsFiles) {
       try {
         const formData = new FormData();
         formData.append('file', file);
@@ -480,13 +515,30 @@ export default function TrialDetail() {
           method: 'POST',
           body: formData,
         });
+        uploaded++;
         loadData();
-        toast.show(`${file.name} uploaded`);
-        runAnalysis(patientId, slide.id, file.name);
+        // Awaited, not fire-and-forget: the previous version dispatched every
+        // slide's analysis concurrently regardless of how many files were
+        // dropped at once. For a handful of slides that's harmless, but for
+        // a real bulk upload (e.g. 200 slides) it meant up to 200 analysis
+        // requests in flight simultaneously, each running its own
+        // independent busy-retry loop against the backend's own 2-slot
+        // inference concurrency limit -- wasted retries, toast spam, and
+        // needless load. Awaiting here makes this loop's own dispatch rate
+        // match its upload rate (one at a time), which is what the backend's
+        // concurrency limit assumes call sites will roughly do; the busy-retry
+        // logic in runAnalysis remains as a safety net for load from OTHER
+        // sources (another browser tab, another user), not the primary
+        // throttle for bulk uploads from this one.
+        await runAnalysis(patientId, slide.id, file.name);
       } catch (e) {
+        failed++;
         console.error('Failed to upload slide', e);
         toast.show(e instanceof Error ? e.message : `Failed to upload ${file.name}`, 'error');
       }
+    }
+    if (svsFiles.length > 5) {
+      toast.show(`Bulk upload complete: ${uploaded} uploaded${failed ? `, ${failed} failed` : ''}`);
     }
   };
 
@@ -593,7 +645,11 @@ export default function TrialDetail() {
   };
 
   const submitESign = async () => {
-    if (!esign || !esignPassword) return;
+    // esignBusy guards against a double-submit: the password field's Enter
+    // handler and the "Sign & Submit" button can both call this before
+    // React re-renders the button as disabled, firing two confirm/correct
+    // requests with the same signature.
+    if (!esign || !esignPassword || esignBusy) return;
     setEsignBusy(true);
     setEsignError('');
     try {
@@ -655,6 +711,14 @@ export default function TrialDetail() {
           model_version: slide.model_version || '',
         }),
       });
+      if (!res.ok) {
+        // fetch() only rejects on a network error — a 4xx/5xx still resolves
+        // with a body, and that body is still a valid Blob (the JSON error
+        // payload as text). Without this check, a failed report generation
+        // silently downloaded a corrupted "*_report.pdf" and told the user
+        // it succeeded.
+        throw new Error(`Request failed (${res.status})`);
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -672,6 +736,7 @@ export default function TrialDetail() {
   const downloadTrialSummary = async () => {
     try {
       const res = await apiFetch(`/api/reports/trial/${trialId}/summary`);
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -689,6 +754,7 @@ export default function TrialDetail() {
   const downloadCsv = async (kind: 'export-corrections-csv' | 'export-patients-csv', suffix: string) => {
     try {
       const res = await apiFetch(`/api/trials/${trialId}/${kind}`);
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -703,7 +769,8 @@ export default function TrialDetail() {
   };
 
   const raiseQuery = async () => {
-    if (!flagFor || !flagForm.subject || !flagForm.description) return;
+    if (!flagFor || !flagForm.subject || !flagForm.description || raisingQuery) return;
+    setRaisingQuery(true);
     try {
       await apiSend('/api/queries/', {
         method: 'POST',
@@ -711,24 +778,29 @@ export default function TrialDetail() {
       });
     } catch (e) {
       toast.show(e instanceof Error ? e.message : 'Failed to raise query', 'error');
+      setRaisingQuery(false);
       return;
     }
     setFlagFor(null);
     setFlagForm({ subject: '', description: '' });
+    setRaisingQuery(false);
     loadData();
     toast.show('Query raised');
   };
 
   const respondQuery = async (queryId: string) => {
     const text = respondText[queryId];
-    if (!text) return;
+    if (!text || respondingQueryIds[queryId]) return;
+    setRespondingQueryIds((prev) => ({ ...prev, [queryId]: true }));
     try {
       await apiSend(`/api/queries/${queryId}/respond`, { method: 'POST', body: JSON.stringify({ text }) });
     } catch (e) {
       toast.show(e instanceof Error ? e.message : 'Failed to add response', 'error');
+      setRespondingQueryIds((prev) => ({ ...prev, [queryId]: false }));
       return;
     }
     setRespondText({ ...respondText, [queryId]: '' });
+    setRespondingQueryIds((prev) => ({ ...prev, [queryId]: false }));
     loadData();
     toast.show('Response added');
   };
@@ -823,7 +895,7 @@ export default function TrialDetail() {
             <Button size="sm" className="!bg-[#34C759] hover:!bg-[#2CAB4E] !text-white" onClick={downloadTrialSummary}>
               <Download className="w-3.5 h-3.5" /> Trial Summary PDF
             </Button>
-            {writable && (
+            {writable && trialOpen && (
               <Button size="sm" onClick={() => setShowAddPatient(true)}>
                 <Plus className="w-3.5 h-3.5" /> Add Patient
               </Button>
@@ -890,7 +962,7 @@ export default function TrialDetail() {
                     >
                       <MessageSquareWarning className="w-3 h-3" /> Flag Query
                     </button>
-                    {writable && (
+                    {writable && trialOpen && (
                       <label className="cursor-pointer inline-flex items-center gap-1 px-2.5 py-1 rounded-[6px] text-[11px] font-semibold bg-[var(--accent-soft)] text-[var(--accent)] hover:bg-[var(--accent-soft)] transition-colors">
                         <Upload className="w-3 h-3" />
                         Upload .svs
@@ -940,7 +1012,7 @@ export default function TrialDetail() {
                               onKeyDown={e => e.key === 'Enter' && respondQuery(q.id)}
                               className="flex-1 px-2.5 py-1.5 rounded-[8px] border border-[var(--border-medium)] bg-[var(--bg-primary)] text-[12px]"
                             />
-                            <Button size="sm" variant="secondary" onClick={() => respondQuery(q.id)}>Respond</Button>
+                            <Button size="sm" variant="secondary" disabled={!!respondingQueryIds[q.id]} onClick={() => respondQuery(q.id)}>Respond</Button>
                             <Button size="sm" variant="ghost" onClick={() => closeQuery(q.id)}>Close</Button>
                           </div>
                         ) : (
@@ -1352,7 +1424,7 @@ export default function TrialDetail() {
             </div>
             <div className="flex justify-end gap-3 mt-6">
               <Button variant="ghost" onClick={() => setFlagFor(null)}>Cancel</Button>
-              <Button onClick={raiseQuery}>Raise Query</Button>
+              <Button disabled={raisingQuery} onClick={raiseQuery}>Raise Query</Button>
             </div>
           </Card>
         </div>

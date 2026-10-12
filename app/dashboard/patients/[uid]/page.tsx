@@ -9,7 +9,7 @@
  * reconstruct that hierarchy mentally on every scan.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import {
   FlaskConical, FileText, Layers, ChevronRight,
@@ -250,18 +250,36 @@ export default function PatientContainerPage() {
   const toast = useToast();
   const { user } = useAuth();
 
-  const load = useCallback(async () => {
+  // Tracks the uid actually on screen right now. A ref, not state or a
+  // closure variable, because it must reflect the LATEST uid at the moment
+  // an in-flight response resolves -- a captured closure value only ever
+  // knows the uid it was created with, which can't detect a navigation
+  // that happened after the request was already sent.
+  const currentUidRef = useRef(uid);
+  currentUidRef.current = uid;
+
+  const load = useCallback(async (forUid: string) => {
     try {
-      setData(await apiSend(`/api/patients/${encodeURIComponent(uid)}/container`));
+      const result = await apiSend(`/api/patients/${encodeURIComponent(forUid)}/container`);
+      // This component doesn't remount on client-side navigation between
+      // patients (only `uid` changes), and the fetch above has no
+      // AbortController. Without this check, navigating from patient A to
+      // patient B before A's slower request resolves let A's response land
+      // AFTER B's and silently overwrite the screen -- B's page showing A's
+      // ISUP grade, findings and signed slides. Only commit a response if
+      // its patient is still the one on screen.
+      if (forUid !== currentUidRef.current) return;
+      setData(result);
       setError('');
     } catch (e) {
+      if (forUid !== currentUidRef.current) return;
       setError(e instanceof Error ? e.message : 'Could not load this patient.');
     } finally {
-      setLoading(false);
+      if (forUid === currentUidRef.current) setLoading(false);
     }
-  }, [uid]);
+  }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { setLoading(true); load(uid); }, [uid, load]);
 
   // The endpoint is authenticated, so the file must be fetched with the
   // session token rather than linked to directly — a plain href would 401.
@@ -555,7 +573,7 @@ export default function PatientContainerPage() {
               <DataProtectionCard
                 uid={uid}
                 isAdmin={user?.role === 'admin'}
-                onChanged={() => { setLoading(true); load(); }}
+                onChanged={() => { setLoading(true); load(uid); }}
               />
             </div>
 

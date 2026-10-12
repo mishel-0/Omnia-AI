@@ -1,10 +1,12 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Activity, ShieldCheck, RefreshCw,
   CheckCircle, XCircle, AlertTriangle, FlaskConical, Users, FileCheck,
 } from 'lucide-react';
+import { apiFetch, useAuth } from '@/lib/auth';
 import { apiBase } from '@/lib/constants';
 import { Card, Button } from '@/components/ui';
 
@@ -41,20 +43,36 @@ function StatCard({ label, value, icon: Icon, valueColor }: { label: string; val
 }
 
 export default function AdminPage() {
+  const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [license, setLicense] = useState<LicenseStatus | null>(null);
   const [trials, setTrials] = useState<Trial[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Every other privileged route in this app (e.g. /dashboard/users) gates
+  // on role, either by redirecting on a backend 403 or hiding itself from
+  // the sidebar for non-admins. This page previously had NO client-side
+  // check at all and used a bare, unauthenticated fetch() — any session
+  // (or none) that navigated here directly saw license and trial-wide
+  // patient/slide counts with no gate. apiFetch attaches the session token
+  // (so a 401 is handled the same way as everywhere else in the app), and
+  // the role check below redirects non-admins the same way UsersPage does.
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) { router.push('/login'); return; }
+    if (user.role !== 'admin') { router.push('/dashboard'); return; }
+  }, [authLoading, user, router]);
+
   const fetchAll = async () => {
     setLoading(true);
     setError(null);
     try {
       const [h, l, t] = await Promise.all([
-        fetch(`${apiBase()}/health`).then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch(`${apiBase()}/api/license/status`).then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch(`${apiBase()}/api/trials/`).then(r => r.ok ? r.json() : []).catch(() => []),
+        apiFetch('/health').then(r => r.ok ? r.json() : null).catch(() => null),
+        apiFetch('/api/license/status').then(r => r.ok ? r.json() : null).catch(() => null),
+        apiFetch('/api/trials/').then(r => r.ok ? r.json() : []).catch(() => []),
       ]);
       setHealth(h);
       setLicense(l);
@@ -66,9 +84,11 @@ export default function AdminPage() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => {
+    if (!authLoading && user?.role === 'admin') fetchAll();
+  }, [authLoading, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (loading) {
+  if (authLoading || loading || !user || user.role !== 'admin') {
     return (
       <div className="min-h-screen bg-[var(--bg-primary)] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
