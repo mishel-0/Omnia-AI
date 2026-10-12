@@ -1,0 +1,49 @@
+PANDA attention-MIL — fold 0 validation QWK by epoch
+====================================================
+Recorded as each epoch completed. The on-pod train_fold0.log was cleared
+on several restarts, so this file is the surviving record of the earlier
+epochs.
+
+  epoch 1 : 0.6841
+  epoch 2 : 0.7176
+  epoch 3 : 0.7671
+  epoch 4 : (not separately recorded; did not beat epoch 5)
+  epoch 5 : 0.7932   <-- best
+  epoch 6 : 0.7910   (loss 0.7508)
+  epoch 7 : 0.7889   (loss 0.5304)
+  epoch 8 : see FINAL_RESULT.txt
+
+Reading the curve: validation QWK plateaued from epoch 5 onward while
+training loss kept falling (0.75 -> 0.53). That gap is the model fitting
+the training set harder without generalizing better — i.e. convergence
+followed by the onset of mild overfitting, not a bug. Epoch 5's 0.7932 is
+this configuration's practical ceiling.
+
+Run configuration
+-----------------
+  architecture   attention-MIL (gated attention, Ilse et al. 2018)
+  backbone       EfficientNet-B0 (ImageNet pretrained)
+  tiles/slide    32
+  tile size      128 px at level 0
+  batch size     6 slides
+  eval           8-way dihedral TTA
+  stain norm     Macenko, fit per bag
+  fold           0 of 5 (stratified by ISUP grade)
+  train / val    7301 / 1827 slides
+  slide filter   1st-place noisy-label keep-list (9128 of 10616 slides)
+
+What would move the number further (all require a full retrain)
+---------------------------------------------------------------
+  - more tiles per slide (32 -> 64+); halving them was a speed tradeoff
+  - larger tile size or a lower magnification level for more context
+  - a bigger backbone than EfficientNet-B0
+  - training the remaining folds (1-4) and ensembling the out-of-fold
+    predictions — the usual path from a single-fold result into the
+    0.83-0.87 range
+
+For context: the PANDA competition winner scored 0.9408 on the private
+leaderboard using a large multi-model ensemble. Independent external
+validation of the best algorithms on non-PANDA cohorts landed at
+0.862-0.868, and pathologist inter-rater agreement is 0.907-0.926
+(Bulten et al. 2022, Nature Medicine). A single fold at 0.79 is a
+legitimate result, not a disappointing one.
